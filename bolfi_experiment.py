@@ -36,7 +36,6 @@ N = 5
 DEFAULT_POSTERIOR_SAMPLE_COUNT = 10000
 DEFAULT_TRIALS = 20
 
-
 def with_constraint(inner, constraint_func):
     def wrapper(*params, batch_size=1, random_state=None):
         if not isinstance(random_state, RandomState):
@@ -219,21 +218,6 @@ class Options:
             "invalid posterior sample count"
         )
         assert self.trials > 0, ValueError("invalid trial count")
-
-
-def split_seed(seed: int, n: int) -> List[int]:
-    assert n > 0
-    subsequences = np.random.SeedSequence(seed).spawn(n)
-    return [
-        subsequence.generate_state(1, np.uint32).item() for subsequence in subsequences
-    ]
-
-
-def star(func: callable):
-    def wrapper(args):
-        return func(*args)
-
-    return wrapper
 
 
 def main():
