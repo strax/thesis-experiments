@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass, field
 from fnmatch import fnmatch
 from functools import cached_property, partial
 from hashlib import sha256
-from itertools import islice
 from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
@@ -112,6 +111,7 @@ class TrialResult:
     failures: int
     emd: float
 
+
 @dataclass
 class Timer:
     begin: float = field(default_factory=time)
@@ -119,6 +119,7 @@ class Timer:
     @property
     def elapsed(self) -> timedelta:
         return timedelta(seconds=time() - self.begin)
+
 
 def cache_get(key: str) -> object | None:
     h = sha256(key.encode()).hexdigest()
@@ -139,6 +140,7 @@ def cache_put(value: object, key: str):
     with path.open("wb") as f:
         pickle.dump(value, f)
 
+
 @dataclass(init=False)
 class BOLFIExperiment:
     name: str
@@ -155,7 +157,7 @@ class BOLFIExperiment:
     def run_rejection_sampler(self, seed: PRNGKeyArray, *, options: Options) -> Sample:
         seed = jax.random.bits(seed, dtype=jnp.uint32).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
-        if (cached_sample := cache_get(cache_key)):
+        if cached_sample := cache_get(cache_key):
             print(f"=> Found cached rejection samples for seed {seed}")
             sample_crc = crc32(cached_sample.samples_array)
             print(f"=> Sample checksum: {sample_crc}")
@@ -172,12 +174,7 @@ class BOLFIExperiment:
         cache_put(sample, cache_key)
         return sample
 
-    def run_bolfi(
-        self,
-        seed: PRNGKeyArray,
-        *,
-        options: Options
-    ) -> BolfiSample:
+    def run_bolfi(self, seed: PRNGKeyArray, *, options: Options) -> BolfiSample:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
         _, d = build_model(self.name, self.sim, self.obs)
@@ -205,31 +202,26 @@ class BOLFIExperiment:
         print(f"=> Sample checksum: {sample_crc}")
         return sample, bolfi.n_failures
 
-    def run(
-        self,
-        seed: PRNGKeyArray,
-        *,
-        options: Options
-    ) -> Iterable[TrialResult]:
+    def run(self, seed: PRNGKeyArray, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
         reference_sample = self.run_rejection_sampler(seed, options=options)
 
-        i = 1
-        while True:
+        results = []
+        for i in range(options.trials):
             print()
             print(f"=> Trial {i}")
             seed, subseed = jax.random.split(seed, 2)
-            bolfi_sample, n_failures = self.run_bolfi(
-                subseed, options=options
-            )
+            bolfi_sample, n_failures = self.run_bolfi(subseed, options=options)
 
             emd = emd_samples(
                 reference_sample.samples_array, bolfi_sample.samples_array
             )
             print(f"=> Failures: {n_failures}")
             print(f"=> EMD: {emd:.4f}")
-            yield TrialResult(experiment=self.name, failures=n_failures, emd=emd)
-            i += 1
+            results.append(
+                TrialResult(experiment=self.name, failures=n_failures, emd=emd)
+            )
+        return results
 
 
 @dataclass
@@ -253,7 +245,7 @@ class Options:
             "--filter",
             metavar="NAME",
             type=str,
-            help="only execute experiments matching NAME"
+            help="only execute experiments matching NAME",
         )
         parser.add_argument(
             "--rejection-sample-count",
@@ -267,7 +259,7 @@ class Options:
             metavar="COUNT",
             type=int,
             default=DEFAULT_BOLFI_SAMPLE_COUNT,
-            help=f"number of points to sample from BOLFI posterior (default: {DEFAULT_BOLFI_SAMPLE_COUNT})"
+            help=f"number of points to sample from BOLFI posterior (default: {DEFAULT_BOLFI_SAMPLE_COUNT})",
         )
         parser.add_argument(
             "--seed",
@@ -289,9 +281,7 @@ class Options:
         assert self.rejection_sample_count > 0, ValueError(
             "invalid rejection sample count"
         )
-        assert self.bolfi_sample_count > 0, ValueError(
-            "invalid BOLFI sample count"
-        )
+        assert self.bolfi_sample_count > 0, ValueError("invalid BOLFI sample count")
         assert self.trials > 0, ValueError("invalid trial count")
 
 
@@ -355,13 +345,7 @@ def main():
     for experiment in experiments:
         print()
         print(f"** Running experiment: {experiment.name} **")
-        trial_results = islice(
-            experiment.run(
-                jax.random.key(options.seed),
-                options=options,
-            ),
-            options.trials,
-        )
+        trial_results = experiment.run(jax.random.key(options.seed), options=options)
         experiment_results.extend(trial_results)
 
     dataframe = pd.DataFrame(map(asdict, experiment_results))
