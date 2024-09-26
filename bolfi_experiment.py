@@ -4,6 +4,7 @@ import math
 import sys
 from argparse import ArgumentParser
 from dataclasses import asdict, dataclass
+from fnmatch import fnmatch
 from functools import cached_property, partial
 from itertools import islice
 from time import time
@@ -35,6 +36,7 @@ N = 5
 
 DEFAULT_POSTERIOR_SAMPLE_COUNT = 10000
 DEFAULT_TRIALS = 20
+
 
 def with_constraint(inner, constraint_func):
     def wrapper(*params, batch_size=1, random_state=None):
@@ -186,10 +188,23 @@ class Options:
     posterior_sample_count: int
     seed: int
     trials: int
+    filter: str | None = None
+    dry_run: bool = False
 
     @classmethod
     def from_args(cls):
         parser = ArgumentParser()
+        parser.add_argument(
+            "--dry-run",
+            help="Print experiments without running them",
+            action="store_true",
+        )
+        parser.add_argument(
+            "--filter",
+            metavar="NAME",
+            type=str,
+            help="Only execute experiments matching NAME."
+        )
         parser.add_argument(
             "--posterior-sample-count",
             metavar="COUNT",
@@ -222,10 +237,6 @@ class Options:
 
 def main():
     options = Options.from_args()
-    print(f"Seed: {options.seed}")
-    print(f"Trials: {options.trials}")
-    print(f"Posterior sample count: {options.posterior_sample_count}")
-    print()
 
     sim = GaussNDMean()
     obs = sim(TRUE_MU1, TRUE_MU2, random_state=options.seed)
@@ -262,6 +273,23 @@ def main():
             feasibility_estimator=GPCFeasibilityEstimator(),
         )
     )
+
+    if options.filter:
+        experiments = [
+            experiment
+            for experiment in experiments
+            if fnmatch(experiment.name, options.filter)
+        ]
+
+    if options.dry_run:
+        for experiment in experiments:
+            print(experiment.name)
+        return
+
+    print(f"Seed: {options.seed}")
+    print(f"Trials: {options.trials}")
+    print(f"Posterior sample count: {options.posterior_sample_count}")
+    print()
 
     experiment_results: List[TrialResult] = []
     for experiment in experiments:
