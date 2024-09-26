@@ -1,12 +1,19 @@
 # pylint: disable=C0301,C0114,C0115,C0116
 
+from __future__ import annotations
+
+import gc
 import math
+import pickle
 import sys
 from argparse import ArgumentParser
-from dataclasses import asdict, dataclass
+from datetime import timedelta
+from dataclasses import asdict, dataclass, field
 from fnmatch import fnmatch
 from functools import cached_property, partial
+from hashlib import sha256
 from itertools import islice
+from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
@@ -34,7 +41,8 @@ TRUE_MU1 = 3
 TRUE_MU2 = 3
 N = 5
 
-DEFAULT_POSTERIOR_SAMPLE_COUNT = 10000
+DEFAULT_REJECTION_SAMPLE_COUNT = 10000
+DEFAULT_BOLFI_SAMPLE_COUNT = 1000
 DEFAULT_TRIALS = 20
 
 
@@ -89,7 +97,7 @@ def constraint_2d_corner(x1, x2, **kwargs) -> np.ndarray:
 
 
 def build_model(name, sim, obs):
-    model = elfi.ElfiModel(name=name)
+    model = elfi.new_model(name)
     mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN, model=model)
     mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN, model=model)
     y = elfi.Simulator(sim, mu1, mu2, observed=obs)
@@ -104,6 +112,32 @@ class TrialResult:
     failures: int
     emd: float
 
+@dataclass
+class Timer:
+    begin: float = field(default_factory=time)
+
+    @property
+    def elapsed(self) -> timedelta:
+        return timedelta(seconds=time() - self.begin)
+
+def cache_get(key: str) -> object | None:
+    h = sha256(key.encode()).hexdigest()
+    path = Path.cwd() / "cache" / h
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+
+def cache_put(value: object, key: str):
+    h = sha256(key.encode()).hexdigest()
+    path = Path.cwd() / "cache" / h
+    path.parent.mkdir(exist_ok=True)
+    with path.open("wb") as f:
+        pickle.dump(value, f)
 
 @dataclass(init=False)
 class BOLFIExperiment:
@@ -118,21 +152,31 @@ class BOLFIExperiment:
         self.bolfi_kwargs = kwargs
         self.obs = obs
 
-    def run_rejection_sampler(self, seed: PRNGKeyArray, sample_count: int) -> Sample:
-        _, d = build_model(self.name, self.sim, self.obs)
+    def run_rejection_sampler(self, seed: PRNGKeyArray, *, options: Options) -> Sample:
         seed = jax.random.bits(seed, dtype=jnp.uint32).item()
+        cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
+        if (cached_sample := cache_get(cache_key)):
+            print(f"=> Found cached rejection samples for seed {seed}")
+            sample_crc = crc32(cached_sample.samples_array)
+            print(f"=> Sample checksum: {sample_crc}")
+            return cached_sample
+
+        _, d = build_model(self.name, self.sim, self.obs)
         sampler = elfi.Rejection(d, seed=seed, batch_size=1024)
         print(f"=> Running rejection sampler with seed {seed}")
-        sample: Sample = sampler.sample(2 * sample_count, bar=True)
+        timer = Timer()
+        sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
+        print(f"=> Completed in {timer.elapsed}")
         sample_crc = crc32(sample.samples_array)
         print(f"=> Sample checksum: {sample_crc}")
+        cache_put(sample, cache_key)
         return sample
 
     def run_bolfi(
         self,
         seed: PRNGKeyArray,
         *,
-        posterior_sample_count=DEFAULT_POSTERIOR_SAMPLE_COUNT,
+        options: Options
     ) -> BolfiSample:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
@@ -149,11 +193,14 @@ class BOLFIExperiment:
             seed=seed,
             **self.bolfi_kwargs,
         )
+        timer = Timer()
         print(f"=> Running BOLFI inference with seed {seed}")
         bolfi.fit(n_evidence=100, bar=True)
 
         print("=> Sampling from BOLFI posterior")
-        sample = bolfi.sample(posterior_sample_count, verbose=True)
+        sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
+        print(f"=> Completed in {timer.elapsed}")
+
         sample_crc = crc32(sample.samples_array)
         print(f"=> Sample checksum: {sample_crc}")
         return sample, bolfi.n_failures
@@ -162,9 +209,10 @@ class BOLFIExperiment:
         self,
         seed: PRNGKeyArray,
         *,
-        posterior_sample_count=DEFAULT_POSTERIOR_SAMPLE_COUNT,
+        options: Options
     ) -> Iterable[TrialResult]:
-        reference_sample = self.run_rejection_sampler(seed, posterior_sample_count)
+        gc.collect()
+        reference_sample = self.run_rejection_sampler(seed, options=options)
 
         i = 1
         while True:
@@ -172,12 +220,13 @@ class BOLFIExperiment:
             print(f"=> Trial {i}")
             seed, subseed = jax.random.split(seed, 2)
             bolfi_sample, n_failures = self.run_bolfi(
-                subseed, posterior_sample_count=posterior_sample_count
+                subseed, options=options
             )
 
             emd = emd_samples(
                 reference_sample.samples_array, bolfi_sample.samples_array
             )
+            print(f"=> Failures: {n_failures}")
             print(f"=> EMD: {emd:.4f}")
             yield TrialResult(experiment=self.name, failures=n_failures, emd=emd)
             i += 1
@@ -185,7 +234,8 @@ class BOLFIExperiment:
 
 @dataclass
 class Options:
-    posterior_sample_count: int
+    bolfi_sample_count: int
+    rejection_sample_count: int
     seed: int
     trials: int
     filter: str | None = None
@@ -196,21 +246,28 @@ class Options:
         parser = ArgumentParser()
         parser.add_argument(
             "--dry-run",
-            help="Print experiments without running them",
+            help="print experiments without running them",
             action="store_true",
         )
         parser.add_argument(
             "--filter",
             metavar="NAME",
             type=str,
-            help="Only execute experiments matching NAME."
+            help="only execute experiments matching NAME"
         )
         parser.add_argument(
-            "--posterior-sample-count",
+            "--rejection-sample-count",
             metavar="COUNT",
             type=int,
-            default=DEFAULT_POSTERIOR_SAMPLE_COUNT,
-            help=f"number of points to sample from the BOLFI posterior (default: {DEFAULT_POSTERIOR_SAMPLE_COUNT})",
+            default=DEFAULT_REJECTION_SAMPLE_COUNT,
+            help=f"number of points to sample with rejection sampler (default: {DEFAULT_REJECTION_SAMPLE_COUNT})",
+        )
+        parser.add_argument(
+            "--bolfi-sample-count",
+            metavar="COUNT",
+            type=int,
+            default=DEFAULT_BOLFI_SAMPLE_COUNT,
+            help=f"number of points to sample from BOLFI posterior (default: {DEFAULT_BOLFI_SAMPLE_COUNT})"
         )
         parser.add_argument(
             "--seed",
@@ -229,8 +286,11 @@ class Options:
         return cls(**vars(ns))
 
     def __post_init__(self):
-        assert self.posterior_sample_count > 0, ValueError(
-            "invalid posterior sample count"
+        assert self.rejection_sample_count > 0, ValueError(
+            "invalid rejection sample count"
+        )
+        assert self.bolfi_sample_count > 0, ValueError(
+            "invalid BOLFI sample count"
         )
         assert self.trials > 0, ValueError("invalid trial count")
 
@@ -288,7 +348,7 @@ def main():
 
     print(f"Seed: {options.seed}")
     print(f"Trials: {options.trials}")
-    print(f"Posterior sample count: {options.posterior_sample_count}")
+    print(f"Rejection sample count: {options.rejection_sample_count}")
     print()
 
     experiment_results: List[TrialResult] = []
@@ -298,7 +358,7 @@ def main():
         trial_results = islice(
             experiment.run(
                 jax.random.key(options.seed),
-                posterior_sample_count=options.posterior_sample_count,
+                options=options,
             ),
             options.trials,
         )
