@@ -1,0 +1,19 @@
+name: thesis-experiments
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pytorch::pytorch
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - jax
+  - pip:
+    - pyemd
+    - gpytorch
+    - jaxtyping
+    - "git+https://github.com/strax/pyvbmc.git"
+    - "git+https://github.com/strax/elfi.git@failure-aware-bolfi"
