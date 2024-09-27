@@ -136,6 +136,7 @@ class TrialResult:
     experiment: str
     failures: int
     emd: float
+    inference_runtime: float
 
 
 def cache_get(key: str) -> object | None:
@@ -195,7 +196,7 @@ class BOLFIExperiment:
 
     def run_bolfi(
         self, seed: PRNGKeyArray, *, options: Options
-    ) -> tuple[BolfiSample | None, int]:
+    ) -> tuple[BolfiSample | None, int, float]:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
         _, d = build_model(self.name, self.sim, self.obs)
@@ -211,21 +212,23 @@ class BOLFIExperiment:
             seed=seed,
             **self.bolfi_kwargs,
         )
+        dprint(f"Running BOLFI inference with seed {seed}...")
         timer = Timer()
-        dprint(f"Running BOLFI inference with seed {seed}")
         bolfi.fit(n_evidence=100, bar=True)
+        inference_runtime = timer.elapsed
+        dprint(f"Inference completed in {inference_runtime}")
         dprint(f"Failures: {bolfi.n_failures}")
 
-        dprint("Sampling from BOLFI posterior")
+        dprint("Sampling from BOLFI posterior...")
         try:
             sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
         except ValueError as err:
             wprint(str(err))
-            return None, bolfi.n_failures
+            sample = None
         else:
-            dprint(f"Completed in {timer.elapsed}")
+            dprint(f"Sampling completed in {timer.elapsed}")
             dprint(f"Sample checksum: {sample_checksum(sample)}")
-            return sample, bolfi.n_failures
+        return sample, bolfi.n_failures, inference_runtime.total_seconds()
 
     def run(self, seed: PRNGKeyArray, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
@@ -236,7 +239,7 @@ class BOLFIExperiment:
             print()
             iprint(f"Trial #{i}")
             seed, subseed = jax.random.split(seed, 2)
-            bolfi_sample, n_failures = self.run_bolfi(subseed, options=options)
+            bolfi_sample, n_failures, inference_runtime = self.run_bolfi(subseed, options=options)
 
             if bolfi_sample is not None:
                 emd = emd_samples(
@@ -247,7 +250,7 @@ class BOLFIExperiment:
                 emd = np.nan
 
             results.append(
-                TrialResult(experiment=self.name, failures=n_failures, emd=emd)
+                TrialResult(experiment=self.name, failures=n_failures, emd=emd, inference_runtime=inference_runtime)
             )
         return results
 
