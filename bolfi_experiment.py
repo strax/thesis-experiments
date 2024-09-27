@@ -18,20 +18,15 @@ from typing import Any, Iterable, List
 from zlib import crc32
 
 import elfi
-import jax
-import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 from elfi.examples.gauss import euclidean_multidim, gauss_nd_mean
 from elfi.methods.bo.feasibility_estimation import OracleFeasibilityEstimator
 from elfi.methods.bo.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from elfi.methods.results import BolfiSample, Sample
-from jaxtyping import PRNGKeyArray
-from numpy.random import RandomState
+from numpy.random import RandomState, SeedSequence
 from numpy.typing import NDArray
 from pyemd import emd_samples
-
-jax.config.update("jax_enable_x64", True)
 
 
 def dprint(message: str):
@@ -176,8 +171,8 @@ class BOLFIExperiment:
         self.bolfi_kwargs = kwargs
         self.obs = obs
 
-    def run_rejection_sampler(self, seed: PRNGKeyArray, *, options: Options) -> Sample:
-        seed = jax.random.bits(seed, dtype=jnp.uint32).item()
+    def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
+        seed = seed.generate_state(1).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
         if cached_sample := cache_get(cache_key):
             dprint(f"Found cached rejection samples for seed {seed}")
@@ -186,7 +181,7 @@ class BOLFIExperiment:
 
         _, d = build_model(self.name, self.sim, self.obs)
         sampler = elfi.Rejection(d, seed=seed, batch_size=1024)
-        dprint(f"Running rejection sampler with seed {seed}")
+        dprint(f"Running rejection sampler with seed {seed}...")
         timer = Timer()
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
         dprint(f"Completed in {timer.elapsed}")
@@ -195,13 +190,13 @@ class BOLFIExperiment:
         return sample
 
     def run_bolfi(
-        self, seed: PRNGKeyArray, *, options: Options
+        self, seed: SeedSequence, *, options: Options
     ) -> tuple[BolfiSample | None, int, float]:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
         _, d = build_model(self.name, self.sim, self.obs)
 
-        seed = jax.random.bits(seed, dtype=jnp.uint32).item()
+        seed = seed.generate_state(1).item()
         bolfi = elfi.BOLFI(
             d,
             batch_size=1,
@@ -230,7 +225,7 @@ class BOLFIExperiment:
             dprint(f"Sample checksum: {sample_checksum(sample)}")
         return sample, bolfi.n_failures, inference_runtime.total_seconds()
 
-    def run(self, seed: PRNGKeyArray, *, options: Options) -> Iterable[TrialResult]:
+    def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
         reference_sample = self.run_rejection_sampler(seed, options=options)
 
@@ -238,7 +233,7 @@ class BOLFIExperiment:
         for i in range(options.trials):
             print()
             iprint(f"Trial #{i}")
-            seed, subseed = jax.random.split(seed, 2)
+            seed, subseed = seed.spawn(2)
             bolfi_sample, n_failures, inference_runtime = self.run_bolfi(subseed, options=options)
 
             if bolfi_sample is not None:
@@ -375,7 +370,7 @@ def main():
     for experiment in experiments:
         print()
         iprint(f"Running experiment: {experiment.name}")
-        trial_results = experiment.run(jax.random.key(options.seed), options=options)
+        trial_results = experiment.run(SeedSequence(options.seed), options=options)
         experiment_results.extend(trial_results)
 
     dataframe = pd.DataFrame(map(asdict, experiment_results))
