@@ -33,6 +33,28 @@ from pyemd import emd_samples
 
 jax.config.update("jax_enable_x64", True)
 
+
+def dprint(message: str):
+    print(f"[*] {message}")
+
+
+def iprint(message: str):
+    print(f"[+] {message}")
+
+
+def wprint(message: str):
+    print(f"[!] {message}")
+
+
+@dataclass
+class Timer:
+    begin: float = field(default_factory=time)
+
+    @property
+    def elapsed(self) -> timedelta:
+        return timedelta(seconds=time() - self.begin)
+
+
 DIM = 2
 MU1_MIN, MU1_MAX = 0, 5
 MU2_MIN, MU2_MAX = 0, 5
@@ -104,6 +126,7 @@ def build_model(name, sim, obs):
     d = elfi.Discrepancy(euclidean_multidim, mean)
     return model, d
 
+
 def sample_checksum(sample: Sample) -> int:
     return crc32(sample.samples_array)
 
@@ -113,15 +136,6 @@ class TrialResult:
     experiment: str
     failures: int
     emd: float
-
-
-@dataclass
-class Timer:
-    begin: float = field(default_factory=time)
-
-    @property
-    def elapsed(self) -> timedelta:
-        return timedelta(seconds=time() - self.begin)
 
 
 def cache_get(key: str) -> object | None:
@@ -143,17 +157,10 @@ def cache_put(value: object, key: str):
     with path.open("wb") as f:
         pickle.dump(value, f)
 
+
 class ExperimentFailure(RuntimeError):
     pass
 
-def dprint(message: str):
-    print(f"[*] {message}")
-
-def iprint(message: str):
-    print(f"[+] {message}")
-
-def wprint(message: str):
-    print(f"[!] {message}")
 
 @dataclass(init=False)
 class BOLFIExperiment:
@@ -186,7 +193,9 @@ class BOLFIExperiment:
         cache_put(sample, cache_key)
         return sample
 
-    def run_bolfi(self, seed: PRNGKeyArray, *, options: Options) -> tuple[BolfiSample | None, int]:
+    def run_bolfi(
+        self, seed: PRNGKeyArray, *, options: Options
+    ) -> tuple[BolfiSample | None, int]:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
         _, d = build_model(self.name, self.sim, self.obs)
