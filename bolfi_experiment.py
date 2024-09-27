@@ -225,6 +225,19 @@ class BOLFIExperiment:
             dprint(f"Sample checksum: {sample_checksum(sample)}")
         return sample, bolfi.n_failures, inference_runtime.total_seconds()
 
+    def run_trial(self, seed: SeedSequence, reference_sample: Sample, *, options: Options) -> TrialResult:
+        bolfi_sample, n_failures, inference_runtime = self.run_bolfi(seed, options=options)
+
+        if bolfi_sample is not None:
+            emd = emd_samples(
+                reference_sample.samples_array, bolfi_sample.samples_array
+            )
+            dprint(f"EMD: {emd:.4f}")
+        else:
+            emd = np.nan
+        return TrialResult(experiment=self.name, failures=n_failures, emd=emd, inference_runtime=inference_runtime)
+
+
     def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
         reference_sample = self.run_rejection_sampler(seed, options=options)
@@ -234,19 +247,9 @@ class BOLFIExperiment:
             print()
             iprint(f"Trial #{i}")
             seed, subseed = seed.spawn(2)
-            bolfi_sample, n_failures, inference_runtime = self.run_bolfi(subseed, options=options)
 
-            if bolfi_sample is not None:
-                emd = emd_samples(
-                    reference_sample.samples_array, bolfi_sample.samples_array
-                )
-                dprint(f"EMD: {emd:.4f}")
-            else:
-                emd = np.nan
-
-            results.append(
-                TrialResult(experiment=self.name, failures=n_failures, emd=emd, inference_runtime=inference_runtime)
-            )
+            result = self.run_trial(subseed, reference_sample, options=options)
+            results.append(result)
         return results
 
 
