@@ -104,6 +104,9 @@ def build_model(name, sim, obs):
     d = elfi.Discrepancy(euclidean_multidim, mean)
     return model, d
 
+def sample_checksum(sample: Sample) -> int:
+    return crc32(sample.samples_array)
+
 
 @dataclass
 class TrialResult:
@@ -140,6 +143,17 @@ def cache_put(value: object, key: str):
     with path.open("wb") as f:
         pickle.dump(value, f)
 
+class ExperimentFailure(RuntimeError):
+    pass
+
+def dprint(message: str):
+    print(f"[*] {message}")
+
+def iprint(message: str):
+    print(f"[+] {message}")
+
+def wprint(message: str):
+    print(f"[!] {message}")
 
 @dataclass(init=False)
 class BOLFIExperiment:
@@ -158,23 +172,21 @@ class BOLFIExperiment:
         seed = jax.random.bits(seed, dtype=jnp.uint32).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
         if cached_sample := cache_get(cache_key):
-            print(f"=> Found cached rejection samples for seed {seed}")
-            sample_crc = crc32(cached_sample.samples_array)
-            print(f"=> Sample checksum: {sample_crc}")
+            dprint(f"Found cached rejection samples for seed {seed}")
+            dprint(f"Sample checksum: {sample_checksum(cached_sample)}")
             return cached_sample
 
         _, d = build_model(self.name, self.sim, self.obs)
         sampler = elfi.Rejection(d, seed=seed, batch_size=1024)
-        print(f"=> Running rejection sampler with seed {seed}")
+        dprint(f"Running rejection sampler with seed {seed}")
         timer = Timer()
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
-        print(f"=> Completed in {timer.elapsed}")
-        sample_crc = crc32(sample.samples_array)
-        print(f"=> Sample checksum: {sample_crc}")
+        dprint(f"Completed in {timer.elapsed}")
+        dprint(f"Sample checksum: {sample_checksum(sample)}")
         cache_put(sample, cache_key)
         return sample
 
-    def run_bolfi(self, seed: PRNGKeyArray, *, options: Options) -> BolfiSample:
+    def run_bolfi(self, seed: PRNGKeyArray, *, options: Options) -> tuple[BolfiSample | None, int]:
         bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
 
         _, d = build_model(self.name, self.sim, self.obs)
@@ -191,16 +203,20 @@ class BOLFIExperiment:
             **self.bolfi_kwargs,
         )
         timer = Timer()
-        print(f"=> Running BOLFI inference with seed {seed}")
+        dprint(f"Running BOLFI inference with seed {seed}")
         bolfi.fit(n_evidence=100, bar=True)
+        dprint(f"Failures: {bolfi.n_failures}")
 
-        print("=> Sampling from BOLFI posterior")
-        sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
-        print(f"=> Completed in {timer.elapsed}")
-
-        sample_crc = crc32(sample.samples_array)
-        print(f"=> Sample checksum: {sample_crc}")
-        return sample, bolfi.n_failures
+        dprint("Sampling from BOLFI posterior")
+        try:
+            sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
+        except ValueError as err:
+            wprint(str(err))
+            return None, bolfi.n_failures
+        else:
+            dprint(f"Completed in {timer.elapsed}")
+            dprint(f"Sample checksum: {sample_checksum(sample)}")
+            return sample, bolfi.n_failures
 
     def run(self, seed: PRNGKeyArray, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
@@ -209,15 +225,18 @@ class BOLFIExperiment:
         results = []
         for i in range(options.trials):
             print()
-            print(f"=> Trial {i}")
+            iprint(f"Trial #{i}")
             seed, subseed = jax.random.split(seed, 2)
             bolfi_sample, n_failures = self.run_bolfi(subseed, options=options)
 
-            emd = emd_samples(
-                reference_sample.samples_array, bolfi_sample.samples_array
-            )
-            print(f"=> Failures: {n_failures}")
-            print(f"=> EMD: {emd:.4f}")
+            if bolfi_sample is not None:
+                emd = emd_samples(
+                    reference_sample.samples_array, bolfi_sample.samples_array
+                )
+                dprint(f"EMD: {emd:.4f}")
+            else:
+                emd = np.nan
+
             results.append(
                 TrialResult(experiment=self.name, failures=n_failures, emd=emd)
             )
@@ -336,15 +355,14 @@ def main():
             print(experiment.name)
         return
 
-    print(f"Seed: {options.seed}")
-    print(f"Trials: {options.trials}")
-    print(f"Rejection sample count: {options.rejection_sample_count}")
-    print()
+    dprint(f"Seed: {options.seed}")
+    dprint(f"Trials: {options.trials}")
+    dprint(f"Rejection sample count: {options.rejection_sample_count}")
 
     experiment_results: List[TrialResult] = []
     for experiment in experiments:
         print()
-        print(f"** Running experiment: {experiment.name} **")
+        iprint(f"Running experiment: {experiment.name}")
         trial_results = experiment.run(jax.random.key(options.seed), options=options)
         experiment_results.extend(trial_results)
 
