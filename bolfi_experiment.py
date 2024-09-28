@@ -106,7 +106,7 @@ def build_model(name, sim, obs):
     return model, d
 
 
-def sample_checksum(sample: Sample) -> int:
+def compute_sample_checksum(sample: Sample) -> int:
     return crc32(sample.samples_array)
 
 
@@ -117,6 +117,8 @@ class TrialResult:
     failures: int
     emd: float
     inference_runtime: float
+    reference_checksum: int
+    bolfi_checksum: int
 
 @dataclass(kw_only=True)
 class BOLFIResult:
@@ -156,7 +158,7 @@ class BOLFIExperiment:
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
         if cached_sample := OBJECT_CACHE.get(cache_key):
             dprint(f"Found cached rejection samples for seed {seed}")
-            dprint(f"Sample checksum: {sample_checksum(cached_sample)}")
+            dprint(f"Sample checksum: {compute_sample_checksum(cached_sample)}")
             return cached_sample
 
         _, d = build_model(self.name, self.sim, self.obs)
@@ -165,7 +167,7 @@ class BOLFIExperiment:
         timer = Timer()
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
         dprint(f"Completed in {timer.elapsed}")
-        dprint(f"Sample checksum: {sample_checksum(sample)}")
+        dprint(f"Sample checksum: {compute_sample_checksum(sample)}")
         OBJECT_CACHE.put(cache_key, sample)
         return sample
 
@@ -208,7 +210,6 @@ class BOLFIExperiment:
             sample = None
         else:
             dprint(f"Sampling completed in {timer.elapsed}")
-            dprint(f"Sample checksum: {sample_checksum(sample)}")
         return BOLFIResult(
             failures=bolfi.n_failures,
             inference_runtime=inference_runtime.total_seconds(),
@@ -226,14 +227,19 @@ class BOLFIExperiment:
             emd = emd_samples(
                 reference_sample.samples_array, bolfi_result.sample.samples_array
             )
+            sample_checksum = compute_sample_checksum(bolfi_result.sample)
+            dprint(f"Sample checksum: {sample_checksum}")
             dprint(f"EMD: {emd:.4f}")
         else:
+            sample_checksum = 0
             emd = np.nan
         return TrialResult(
             experiment=self.name,
             seed=seed,
             failures=bolfi_result.failures,
             emd=emd,
+            bolfi_checksum=sample_checksum,
+            reference_checksum=compute_sample_checksum(reference_sample),
             inference_runtime=bolfi_result.inference_runtime,
         )
 
