@@ -19,6 +19,7 @@ from zlib import crc32
 from scipy.special import expit
 
 import elfi
+import elfi.clients.dask
 import numpy as np
 import pandas as pd
 from elfi.examples.gauss import euclidean_multidim, gauss_nd_mean
