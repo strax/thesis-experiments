@@ -119,9 +119,9 @@ def build_model(name, sim, obs):
     model = elfi.new_model(name)
     mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN, model=model)
     mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN, model=model)
-    y = elfi.Simulator(sim, mu1, mu2, observed=obs)
-    mean = elfi.Summary(partial(np.mean, axis=1), y)
-    d = elfi.Discrepancy(euclidean_multidim, mean)
+    y = elfi.Simulator(sim, mu1, mu2, observed=obs, model=model)
+    mean = elfi.Summary(partial(np.mean, axis=1), y, model=model)
+    d = elfi.Discrepancy(euclidean_multidim, mean, model=model)
     return model, d
 
 
