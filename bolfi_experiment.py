@@ -4,20 +4,15 @@ from __future__ import annotations
 
 import gc
 import math
-import pickle
 import sys
 from argparse import ArgumentParser
-from datetime import timedelta
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from functools import cached_property, partial
-from hashlib import sha256
 from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
-from scipy.special import expit
-from toolbox import ObjectCache
 
 import elfi
 import elfi.clients.dask
@@ -30,29 +25,11 @@ from elfi.methods.results import BolfiSample, Sample
 from numpy.random import RandomState, SeedSequence
 from numpy.typing import NDArray
 from pyemd import emd_samples
+from scipy.special import expit
 
-
-def dprint(message: str):
-    print(f"[*] {message}")
-
-
-def iprint(message: str):
-    print(f"[+] {message}")
-
-
-def wprint(message: str):
-    print(f"[!] {message}")
+from toolbox import ObjectCache, Timer, dprint, iprint, wprint
 
 OBJECT_CACHE = ObjectCache(Path.cwd() / "cache")
-
-
-@dataclass
-class Timer:
-    begin: float = field(default_factory=time)
-
-    @property
-    def elapsed(self) -> timedelta:
-        return timedelta(seconds=time() - self.begin)
 
 
 DIM = 2
@@ -140,6 +117,7 @@ class TrialResult:
     emd: float
     inference_runtime: float
 
+
 class ExperimentFailure(RuntimeError):
     pass
 
@@ -152,7 +130,15 @@ class BOLFIExperiment:
     bolfi_kwargs: dict[str, Any]
     obs: NDArray[np.float64]
 
-    def __init__(self, *, name: str, obs: NDArray[np.float64], sim: Any, feasibility_estimator_factory = None, **kwargs):
+    def __init__(
+        self,
+        *,
+        name: str,
+        obs: NDArray[np.float64],
+        sim: Any,
+        feasibility_estimator_factory=None,
+        **kwargs,
+    ):
         self.name = name
         self.sim = sim
         self.feasibility_estimator_factory = feasibility_estimator_factory
@@ -221,8 +207,12 @@ class BOLFIExperiment:
             dprint(f"Sample checksum: {sample_checksum(sample)}")
         return sample, bolfi.n_failures, inference_runtime.total_seconds()
 
-    def run_trial(self, seed: SeedSequence, reference_sample: Sample, *, options: Options) -> TrialResult:
-        bolfi_sample, n_failures, inference_runtime = self.run_bolfi(seed, options=options)
+    def run_trial(
+        self, seed: SeedSequence, reference_sample: Sample, *, options: Options
+    ) -> TrialResult:
+        bolfi_sample, n_failures, inference_runtime = self.run_bolfi(
+            seed, options=options
+        )
 
         if bolfi_sample is not None:
             emd = emd_samples(
@@ -231,8 +221,12 @@ class BOLFIExperiment:
             dprint(f"EMD: {emd:.4f}")
         else:
             emd = np.nan
-        return TrialResult(experiment=self.name, failures=n_failures, emd=emd, inference_runtime=inference_runtime)
-
+        return TrialResult(
+            experiment=self.name,
+            failures=n_failures,
+            emd=emd,
+            inference_runtime=inference_runtime,
+        )
 
     def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
         gc.collect()
@@ -337,7 +331,9 @@ def main():
             name="gauss_nd_mean/hidden_constraint/oracle",
             obs=obs,
             sim=with_constraint(sim, constraint_func=constraint_2d_corner),
-            feasibility_estimator_factory=partial(OracleFeasibilityEstimator, constraint_2d_corner),
+            feasibility_estimator_factory=partial(
+                OracleFeasibilityEstimator, constraint_2d_corner
+            ),
         )
     )
     experiments.append(
