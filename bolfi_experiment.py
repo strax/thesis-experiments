@@ -17,6 +17,7 @@ from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
 from scipy.special import expit
+from toolbox import ObjectCache
 
 import elfi
 import elfi.clients.dask
@@ -41,6 +42,8 @@ def iprint(message: str):
 
 def wprint(message: str):
     print(f"[!] {message}")
+
+OBJECT_CACHE = ObjectCache(Path.cwd() / "cache")
 
 
 @dataclass
@@ -137,27 +140,6 @@ class TrialResult:
     emd: float
     inference_runtime: float
 
-
-def cache_get(key: str) -> object | None:
-    h = sha256(key.encode()).hexdigest()
-    path = Path.cwd() / "cache" / h
-    if not path.exists():
-        return None
-    try:
-        with path.open("rb") as f:
-            return pickle.load(f)
-    except Exception:
-        return None
-
-
-def cache_put(value: object, key: str):
-    h = sha256(key.encode()).hexdigest()
-    path = Path.cwd() / "cache" / h
-    path.parent.mkdir(exist_ok=True)
-    with path.open("wb") as f:
-        pickle.dump(value, f)
-
-
 class ExperimentFailure(RuntimeError):
     pass
 
@@ -180,7 +162,7 @@ class BOLFIExperiment:
     def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
         seed = seed.generate_state(1).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
-        if cached_sample := cache_get(cache_key):
+        if cached_sample := OBJECT_CACHE.get(cache_key):
             dprint(f"Found cached rejection samples for seed {seed}")
             dprint(f"Sample checksum: {sample_checksum(cached_sample)}")
             return cached_sample
@@ -192,7 +174,7 @@ class BOLFIExperiment:
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
         dprint(f"Completed in {timer.elapsed}")
         dprint(f"Sample checksum: {sample_checksum(sample)}")
-        cache_put(sample, cache_key)
+        OBJECT_CACHE.put(cache_key, sample)
         return sample
 
     def run_bolfi(
