@@ -112,19 +112,36 @@ def compute_sample_checksum(sample: Sample) -> int:
 
 @dataclass(kw_only=True)
 class TrialResult:
+    # region Identifiers
     experiment: str
     seed: int
-    failures: int
+    # endregion
+
+    # region Configuration
+    bolfi_sample_checksum: int
+    bolfi_sample_count: int
+    reference_sample_checksum: int
+    reference_sample_count: int
+    n_evidence: int
+    n_failures: int
+    n_initial_evidence: int
+    update_interval: int
+    # endregion
+
+    # region Outcomes
     emd: float
     inference_runtime: float
-    reference_checksum: int
-    bolfi_checksum: int
+    # endregion
 
 @dataclass(kw_only=True)
 class BOLFIResult:
-    failures: int
     inference_runtime: float
+    n_evidence: int
+    n_failures: int
+    n_initial_evidence: int
     sample: BolfiSample | None
+    update_interval: int
+
 
 class ExperimentFailure(RuntimeError):
     pass
@@ -211,9 +228,12 @@ class BOLFIExperiment:
         else:
             dprint(f"Sampling completed in {timer.elapsed}")
         return BOLFIResult(
-            failures=bolfi.n_failures,
             inference_runtime=inference_runtime.total_seconds(),
+            n_evidence=bolfi.n_evidence,
+            n_failures=bolfi.n_failures,
+            n_initial_evidence=bolfi.n_initial_evidence,
             sample=sample,
+            update_interval=bolfi.update_interval,
         )
 
     def run_trial(
@@ -234,13 +254,18 @@ class BOLFIExperiment:
             sample_checksum = 0
             emd = np.nan
         return TrialResult(
-            experiment=self.name,
-            seed=seed,
-            failures=bolfi_result.failures,
+            bolfi_sample_checksum=sample_checksum,
+            bolfi_sample_count=bolfi_result.sample.n_samples,
             emd=emd,
-            bolfi_checksum=sample_checksum,
-            reference_checksum=compute_sample_checksum(reference_sample),
+            experiment=self.name,
             inference_runtime=bolfi_result.inference_runtime,
+            n_evidence=bolfi_result.n_evidence,
+            n_failures=bolfi_result.n_failures,
+            n_initial_evidence=bolfi_result.n_initial_evidence,
+            reference_sample_checksum=compute_sample_checksum(reference_sample),
+            reference_sample_count=reference_sample.n_samples,
+            seed=seed,
+            update_interval=bolfi_result.update_interval,
         )
 
     def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
