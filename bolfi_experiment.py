@@ -165,12 +165,14 @@ class ExperimentFailure(RuntimeError):
 class BOLFIExperiment:
     name: str
     sim: Any
+    feasibility_estimator_factory: Any
     bolfi_kwargs: dict[str, Any]
     obs: NDArray[np.float64]
 
-    def __init__(self, *, name: str, obs: NDArray[np.float64], sim: Any, **kwargs):
+    def __init__(self, *, name: str, obs: NDArray[np.float64], sim: Any, feasibility_estimator_factory = None, **kwargs):
         self.name = name
         self.sim = sim
+        self.feasibility_estimator_factory = feasibility_estimator_factory
         self.bolfi_kwargs = kwargs
         self.obs = obs
 
@@ -200,6 +202,12 @@ class BOLFIExperiment:
         _, d = build_model(self.name, self.sim, self.obs)
 
         seed = seed.generate_state(1).item()
+
+        if self.feasibility_estimator_factory is not None:
+            feasibility_estimator = self.feasibility_estimator_factory()
+        else:
+            feasibility_estimator = None
+
         bolfi = elfi.BOLFI(
             d,
             batch_size=1,
@@ -208,6 +216,7 @@ class BOLFIExperiment:
             bounds=bounds,
             acq_noise_var=0,
             seed=seed,
+            feasibility_estimator=feasibility_estimator,
             max_parallel_batches=1,
             **self.bolfi_kwargs,
         )
@@ -345,7 +354,7 @@ def main():
             name="gauss_nd_mean/hidden_constraint/oracle",
             obs=obs,
             sim=with_constraint(sim, constraint_func=constraint_2d_corner),
-            feasibility_estimator=OracleFeasibilityEstimator(constraint_2d_corner),
+            feasibility_estimator_factory=partial(OracleFeasibilityEstimator, constraint_2d_corner),
         )
     )
     experiments.append(
@@ -353,7 +362,7 @@ def main():
             name="gauss_nd_mean/hidden_constraint/gpc",
             obs=obs,
             sim=with_constraint(sim, constraint_func=constraint_2d_corner),
-            feasibility_estimator=GPCFeasibilityEstimator(),
+            feasibility_estimator_factory=GPCFeasibilityEstimator,
         )
     )
 
