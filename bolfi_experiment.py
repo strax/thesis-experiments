@@ -205,6 +205,7 @@ class BOLFIExperiment:
             bounds=bounds,
             acq_noise_var=0,
             seed=seed,
+            max_parallel_batches=1,
             **self.bolfi_kwargs,
         )
         dprint(f"Running BOLFI inference with seed {seed}...")
