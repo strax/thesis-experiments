@@ -16,6 +16,7 @@ from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
+from scipy.special import expit
 
 import elfi
 import numpy as np
@@ -107,9 +108,11 @@ class GaussNDMean:
         )
 
 
-def constraint_2d_corner(x1, x2, **kwargs) -> np.ndarray:
-    del kwargs
-    return np.atleast_1d(np.sqrt(np.square(x1) + np.square(x2)) >= 2.5)
+def constraint_2d_corner(x, y, a=5, b=10, scale=5, **kwargs):
+    x = x / scale
+    y = y / scale
+    z = expit((x + y - 1) * (a + b * np.square(x - y)))
+    return (1 - 2 * np.minimum(z, 0.5)) <= 0.9
 
 
 def build_model(name, sim, obs):
