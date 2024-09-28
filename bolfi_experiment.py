@@ -380,7 +380,11 @@ def main():
     dataframe = pd.DataFrame(map(asdict, experiment_results))
     dataframe = dataframe.set_index("experiment")
     timestamp = str(math.trunc(time()))
-    dataframe.to_csv(f"bolfi-experiments-{timestamp}.csv")
+
+    filename = f"bolfi-experiments-{timestamp}.csv"
+    print()
+    iprint(f"Saving results to {filename}")
+    dataframe.to_csv(filename)
 
 
 if __name__ == "__main__":
