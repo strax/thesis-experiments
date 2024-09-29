@@ -17,7 +17,6 @@ from typing import Any, Iterable, List
 from zlib import crc32
 
 import elfi
-import elfi.clients.native
 import numpy as np
 import pandas as pd
 from elfi.methods.bo.feasibility_estimation import OracleFeasibilityEstimator
@@ -217,6 +216,7 @@ class Options:
     rejection_sample_count: int
     seed: int
     trials: int
+    elfi_client: str
     filter: str | None = None
     dry_run: bool = False
     no_cache: bool = False
@@ -270,6 +270,14 @@ class Options:
             "--no-cache",
             action="store_true",
             help="disable rejection sample caching"
+        )
+        parser.add_argument(
+            "--elfi-client",
+            type=str,
+            metavar="CLIENT",
+            default='native',
+            help="ELFI client to use. Available choices: native, multiprocessing, dask (default: native)",
+            choices=['native', 'multiprocessing', 'dask']
         )
         ns = parser.parse_args()
         return cls(**vars(ns))
@@ -328,6 +336,9 @@ def main():
             print(experiment.name)
         return
 
+    elfi.set_client(options.elfi_client)
+
+    dprint(f"ELFI client: {options.elfi_client}")
     dprint(f"Seed: {options.seed}")
     dprint(f"Trials: {options.trials}")
     dprint(f"Rejection sample count: {options.rejection_sample_count}")
