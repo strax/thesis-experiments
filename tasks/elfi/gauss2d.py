@@ -37,16 +37,6 @@ class Gauss2D:
     def cov_matrix(self) -> NDArray:
         return np.array([[0.6, 0.5], [0.5, 0.6]])
 
-    @cached_property
-    def observed(self) -> NDArray:
-        return gauss_nd_mean(
-            self.mu1,
-            self.mu2,
-            n_obs=self.n_obs,
-            cov_matrix=self.cov_matrix,
-            random_state=self.seed,
-        )
-
     @property
     def bounds(self) -> Bounds:
         return {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
@@ -66,8 +56,8 @@ class Gauss2D:
         mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN)
         mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN)
 
-        y = elfi.Simulator(self.simulator, mu1, mu2, observed=self.observed)
-        mean = elfi.Summary(ss_mean, y)
+        y = elfi.Simulator(self.simulator, mu1, mu2)
+        mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]))
         d = elfi.Discrepancy(euclidean_multidim, mean)
 
         return ModelBundle(model=model, target=d)
