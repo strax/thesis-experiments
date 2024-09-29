@@ -53,11 +53,11 @@ class Gauss2D:
     def build_model(self) -> ModelBundle:
         model = elfi.new_model(self.__class__.__name__)
 
-        mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN)
-        mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN)
+        mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN, model=model)
+        mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN, model=model)
 
-        y = elfi.Simulator(self.simulator, mu1, mu2)
-        mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]))
-        d = elfi.Discrepancy(euclidean_multidim, mean)
+        y = elfi.Simulator(self.simulator, mu1, mu2, model=model)
+        mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]), model=model)
+        d = elfi.Discrepancy(euclidean_multidim, mean, model=model)
 
         return ModelBundle(model=model, target=d)
