@@ -15,5 +15,6 @@ dependencies:
     - pyemd
     - gpytorch
     - jaxtyping
+    - pylint
     - "git+https://github.com/strax/pyvbmc.git"
     - "git+https://github.com/strax/elfi.git@failure-aware-bolfi"
