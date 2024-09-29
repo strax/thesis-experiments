@@ -10,7 +10,6 @@ dependencies:
   - scipy
   - matplotlib
   - pandas
-  - jax
   - pip:
     - pyemd
     - gpytorch
