@@ -2,13 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial, cached_property
-from jaxtyping import Float
 
 import elfi
 import numpy as np
-from elfi import ElfiModel
 from elfi.examples.gauss import gauss_nd_mean, euclidean_multidim, ss_mean
-from numpy.random import RandomState
 from numpy.typing import ArrayLike, NDArray
 from scipy.special import expit
 

@@ -8,7 +8,7 @@ import sys
 from argparse import ArgumentParser
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
-from functools import cached_property, partial
+from functools import partial
 from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
@@ -18,14 +18,12 @@ import elfi
 import elfi.clients.dask
 import numpy as np
 import pandas as pd
-from elfi.examples.gauss import euclidean_multidim, gauss_nd_mean
 from elfi.methods.bo.feasibility_estimation import OracleFeasibilityEstimator
 from elfi.methods.bo.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from elfi.methods.results import BolfiSample, Sample
-from numpy.random import RandomState, SeedSequence
+from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from pyemd import emd_samples
-from scipy.special import expit
 
 from toolbox import ObjectCache, Timer, dprint, iprint, wprint
 
