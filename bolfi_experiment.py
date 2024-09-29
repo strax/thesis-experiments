@@ -7,7 +7,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import math
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from functools import partial
@@ -103,7 +103,7 @@ class BOLFIExperiment:
     def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
         seed = seed.generate_state(1).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
-        if cached_sample := OBJECT_CACHE.get(cache_key):
+        if options.cache and (cached_sample := OBJECT_CACHE.get(cache_key)):
             dprint(f"Found cached rejection samples for seed {seed}")
             dprint(f"Sample checksum: {compute_sample_checksum(cached_sample)}")
             return cached_sample
@@ -115,7 +115,8 @@ class BOLFIExperiment:
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
         dprint(f"Completed in {timer.elapsed}")
         dprint(f"Sample checksum: {compute_sample_checksum(sample)}")
-        OBJECT_CACHE.put(cache_key, sample)
+        if options.cache:
+            OBJECT_CACHE.put(cache_key, sample)
         return sample
 
     def run_bolfi(
@@ -218,6 +219,11 @@ class Options:
     trials: int
     filter: str | None = None
     dry_run: bool = False
+    no_cache: bool = False
+
+    @property
+    def cache(self):
+        return not self.no_cache
 
     @classmethod
     def from_args(cls):
@@ -259,6 +265,11 @@ class Options:
             metavar="COUNT",
             default=DEFAULT_TRIALS,
             help=f"number of trials to run (with different seed each) for each experiment (default: {DEFAULT_TRIALS})",
+        )
+        parser.add_argument(
+            "--no-cache",
+            action="store_true",
+            help="disable rejection sample caching"
         )
         ns = parser.parse_args()
         return cls(**vars(ns))
@@ -320,6 +331,9 @@ def main():
     dprint(f"Seed: {options.seed}")
     dprint(f"Trials: {options.trials}")
     dprint(f"Rejection sample count: {options.rejection_sample_count}")
+
+    if not options.cache:
+        dprint("Rejection sample cache is disabled")
 
     timer = Timer()
     experiment_results: List[TrialResult] = []
