@@ -29,82 +29,14 @@ from scipy.special import expit
 
 from toolbox import ObjectCache, Timer, dprint, iprint, wprint
 
+from tasks.elfi import ELFIModelBuilder
+from tasks.elfi.gauss2d import Gauss2D, constraint_2d_corner
+
 OBJECT_CACHE = ObjectCache(Path.cwd() / "cache")
-
-
-DIM = 2
-MU1_MIN, MU1_MAX = 0, 5
-MU2_MIN, MU2_MAX = 0, 5
-TRUE_MU1 = 3
-TRUE_MU2 = 3
-N = 5
 
 DEFAULT_REJECTION_SAMPLE_COUNT = 10000
 DEFAULT_BOLFI_SAMPLE_COUNT = 1000
 DEFAULT_TRIALS = 20
-
-
-def with_constraint(inner, constraint_func):
-    def wrapper(*params, batch_size=1, random_state=None):
-        if not isinstance(random_state, RandomState):
-            random_state = RandomState(random_state)
-        out = inner(*params, batch_size=batch_size, random_state=random_state)
-        failed = ~constraint_func(*params, random_state=random_state)
-        out[failed] = np.nan
-        return out
-
-    return wrapper
-
-
-def with_random_errors(inner, *, p):
-    def wrapped(*params, batch_size=1, random_state=None):
-        if not isinstance(random_state, RandomState):
-            random_state = RandomState(random_state)
-        out = inner(*params, batch_size=batch_size, random_state=random_state)
-        failed = random_state.random(batch_size) <= p
-        out[failed] = np.nan
-        return out
-
-    return wrapped
-
-
-@dataclass(frozen=True, kw_only=True)
-class GaussNDMean:
-    ndim: int = 2
-    nobs: int = 5
-
-    @cached_property
-    def cov_matrix(self) -> np.ndarray:
-        return (0.1 * np.diag(np.ones((self.ndim,)))) + 0.5 * np.ones(
-            (self.ndim, self.ndim)
-        )
-
-    def __call__(self, *mu, batch_size=1, random_state=None):
-        return gauss_nd_mean(
-            *mu,
-            cov_matrix=self.cov_matrix,
-            n_obs=self.nobs,
-            batch_size=batch_size,
-            random_state=random_state,
-        )
-
-
-def constraint_2d_corner(x, y, a=5, b=10, scale=5, **kwargs):
-    x = x / scale
-    y = y / scale
-    z = expit((x + y - 1) * (a + b * np.square(x - y)))
-    return (1 - 2 * np.minimum(z, 0.5)) <= 0.9
-
-
-def build_model(name, sim, obs):
-    model = elfi.new_model(name)
-    mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN, model=model)
-    mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN, model=model)
-    y = elfi.Simulator(sim, mu1, mu2, observed=obs, model=model)
-    mean = elfi.Summary(partial(np.mean, axis=1), y, model=model)
-    d = elfi.Discrepancy(euclidean_multidim, mean, model=model)
-    return model, d
-
 
 def compute_sample_checksum(sample: Sample) -> int:
     return crc32(sample.samples_array)
@@ -159,16 +91,14 @@ class BOLFIExperiment:
         self,
         *,
         name: str,
-        obs: NDArray[np.float64],
-        sim: Any,
+        model_builder: ELFIModelBuilder,
         feasibility_estimator_factory=None,
         **kwargs,
     ):
         self.name = name
-        self.sim = sim
+        self.model_builder = model_builder
         self.feasibility_estimator_factory = feasibility_estimator_factory
         self.bolfi_kwargs = kwargs
-        self.obs = obs
 
     def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
         seed = seed.generate_state(1).item()
@@ -178,8 +108,8 @@ class BOLFIExperiment:
             dprint(f"Sample checksum: {compute_sample_checksum(cached_sample)}")
             return cached_sample
 
-        _, d = build_model(self.name, self.sim, self.obs)
-        sampler = elfi.Rejection(d, seed=seed, batch_size=1024)
+        bundle = self.model_builder.build_model()
+        sampler = elfi.Rejection(bundle.target, seed=seed, batch_size=1024)
         dprint(f"Running rejection sampler with seed {seed}...")
         timer = Timer()
         sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
@@ -191,9 +121,7 @@ class BOLFIExperiment:
     def run_bolfi(
         self, seed: int, *, options: Options
     ) -> BOLFIResult:
-        bounds = {"mu1": (MU1_MIN, MU1_MAX), "mu2": (MU2_MIN, MU2_MAX)}
-
-        _, d = build_model(self.name, self.sim, self.obs)
+        bundle = self.model_builder.build_model()
 
         if self.feasibility_estimator_factory is not None:
             feasibility_estimator = self.feasibility_estimator_factory()
@@ -201,11 +129,11 @@ class BOLFIExperiment:
             feasibility_estimator = None
 
         bolfi = elfi.BOLFI(
-            d,
+            bundle.target,
             batch_size=1,
             initial_evidence=20,
             update_interval=10,
-            bounds=bounds,
+            bounds=self.model_builder.bounds,
             acq_noise_var=0,
             seed=seed,
             feasibility_estimator=feasibility_estimator,
@@ -347,30 +275,24 @@ class Options:
 def main():
     options = Options.from_args()
 
-    sim = GaussNDMean()
-    obs = sim(TRUE_MU1, TRUE_MU2, random_state=options.seed)
-
     experiments: List[BOLFIExperiment] = []
-    experiments.append(BOLFIExperiment(name="gauss_nd_mean/base", obs=obs, sim=sim))
+    experiments.append(BOLFIExperiment(name="gauss_nd_mean/base", model_builder=Gauss2D(seed=options.seed)))
     experiments.append(
         BOLFIExperiment(
             name="gauss_nd_mean/random_failures/p=0.2",
-            obs=obs,
-            sim=with_random_errors(sim, p=0.2),
+            model_builder=Gauss2D(stochastic_failure_rate=0.2, seed=options.seed),
         )
     )
     experiments.append(
         BOLFIExperiment(
             name="gauss_nd_mean/hidden_constraint",
-            obs=obs,
-            sim=with_constraint(sim, constraint_func=constraint_2d_corner),
+            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed)
         )
     )
     experiments.append(
         BOLFIExperiment(
             name="gauss_nd_mean/hidden_constraint/oracle",
-            obs=obs,
-            sim=with_constraint(sim, constraint_func=constraint_2d_corner),
+            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
             feasibility_estimator_factory=partial(
                 OracleFeasibilityEstimator, constraint_2d_corner
             ),
@@ -379,8 +301,7 @@ def main():
     experiments.append(
         BOLFIExperiment(
             name="gauss_nd_mean/hidden_constraint/gpc",
-            obs=obs,
-            sim=with_constraint(sim, constraint_func=constraint_2d_corner),
+            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
             feasibility_estimator_factory=GPCFeasibilityEstimator,
         )
     )
