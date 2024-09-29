@@ -323,6 +323,7 @@ def main():
     dprint(f"Trials: {options.trials}")
     dprint(f"Rejection sample count: {options.rejection_sample_count}")
 
+    timer = Timer()
     experiment_results: List[TrialResult] = []
     for experiment in experiments:
         print()
@@ -330,12 +331,13 @@ def main():
         trial_results = experiment.run(SeedSequence(options.seed), options=options)
         experiment_results.extend(trial_results)
 
+    dprint(f"Total runtime: {timer.elapsed}")
+
     dataframe = pd.DataFrame(map(asdict, experiment_results))
     dataframe = dataframe.set_index("experiment")
     timestamp = str(math.trunc(time()))
 
     filename = f"bolfi-experiments-{timestamp}.csv"
-    print()
     iprint(f"Saving results to {filename}")
     dataframe.to_csv(filename)
 
