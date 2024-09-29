@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
-import gc
 import math
 import sys
 from argparse import ArgumentParser
@@ -198,7 +197,6 @@ class BOLFIExperiment:
         )
 
     def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
-        gc.collect()
         reference_sample = self.run_rejection_sampler(seed, options=options)
 
         results = []
