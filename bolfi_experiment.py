@@ -1,6 +1,9 @@
-# pylint: disable=C0301,C0114,C0115,C0116
+# pylint: disable=C0413,C0301,C0114,C0115,C0116
 
 from __future__ import annotations
+
+import os
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 import gc
 import math
@@ -15,7 +18,7 @@ from typing import Any, Iterable, List
 from zlib import crc32
 
 import elfi
-import elfi.clients.dask
+import elfi.clients.native
 import numpy as np
 import pandas as pd
 from elfi.methods.bo.feasibility_estimation import OracleFeasibilityEstimator
