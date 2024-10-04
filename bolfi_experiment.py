@@ -202,7 +202,7 @@ class BOLFIExperiment:
         results = []
         for i in range(options.trials):
             print()
-            iprint(f"Trial #{i}")
+            iprint(f"Trial #{i + 1}")
             seed, subseed = seed.spawn(2)
 
             result = self.run_trial(subseed.generate_state(1).item(), reference_sample, options=options)
