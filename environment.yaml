@@ -1,19 +1,29 @@
 name: thesis-experiments
 channels:
-  - pytorch
   - conda-forge
+  - pytorch
 dependencies:
   - python=3.12
   - pip
-  - pytorch::pytorch
-  - numpy
-  - scipy
   - matplotlib
+  - numpy<2.0.0
   - pandas
+  - pytorch::pytorch
+  - scipy
+  - seaborn
   - pip:
-    - pyemd
-    - gpytorch
-    - jaxtyping
-    - pylint
-    - "git+https://github.com/strax/pyvbmc.git"
+    - "arviz"
+    - "blackjax"
+    - "chex"
+    - "colorcet"
+    - "jax"
+    - "jaxtyping"
+    - "multipledispatch"
+    - "pyemd"
+    - "pylint"
+    - "pytorch-minimize"
+    - "tfp-nightly"
+    - "git+https://github.com/cornellius-gp/linear_operator.git"
+    - "git+https://github.com/cornellius-gp/gpytorch.git"
     - "git+https://github.com/strax/elfi.git@failure-aware-bolfi"
+    - "git+https://github.com/strax/pyvbmc.git@numpy-2-merge-rollback"

@@ -28,8 +28,8 @@ from pyemd import emd_samples
 
 from toolbox import ObjectCache, Timer, dprint, iprint, wprint
 
-from tasks.elfi import ELFIModelBuilder
-from tasks.elfi.gauss2d import Gauss2D, constraint_2d_corner
+from bench.elfi.tasks import ELFIModelBuilder
+from bench.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
 
 OBJECT_CACHE = ObjectCache(Path.cwd() / "cache")
 
