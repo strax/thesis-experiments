@@ -35,26 +35,21 @@ def marginal_total_variation(xx1, xx2):
 
     D = np.size(xx1, 1)
 
-    lb1 = np.full((1, xx1.shape[1]), -np.inf)
-    ub1 = np.full((1, xx1.shape[1]), np.inf)
-    lb2 = np.full((1, xx2.shape[1]), -np.inf)
-    ub2 = np.full((1, xx2.shape[1]), np.inf)
-
     nkde = 2**13
     mtv = np.zeros((1, D))
 
     # Set bounds for kernel density estimate
-    lb1_xx = np.amin(xx1, axis=0)
-    ub1_xx = np.amax(xx1, axis=0)
+    lb1_xx = np.amin(xx1, axis=0, keepdims=True)
+    ub1_xx = np.amax(xx1, axis=0, keepdims=True)
     range1 = ub1_xx - lb1_xx
-    lb1 = np.maximum(lb1_xx - range1 / 10, lb1)
-    ub1 = np.minimum(ub1_xx + range1 / 10, ub1)
+    lb1 = lb1_xx - range1 / 10
+    ub1 = ub1_xx + range1 / 10
 
-    lb2_xx = np.amin(xx2, axis=0)
-    ub2_xx = np.amax(xx2, axis=0)
+    lb2_xx = np.amin(xx2, axis=0, keepdims=True)
+    ub2_xx = np.amax(xx2, axis=0, keepdims=True)
     range2 = ub2_xx - lb2_xx
-    lb2 = np.maximum(lb2_xx - range2 / 10, lb2)
-    ub2 = np.minimum(ub2_xx + range2 / 10, ub2)
+    lb2 = lb2_xx - range2 / 10
+    ub2 = ub2_xx + range2 / 10
 
     # Compute marginal total variation
     for d in range(D):
