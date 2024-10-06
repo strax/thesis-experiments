@@ -48,8 +48,6 @@ class Options:
     trials: int
     verbose: bool
     vp_sample_count: int
-    mcmc_chains: int
-    mcmc_sample_count: int
     filter: str | None = None
     dry_run: bool = False
 
@@ -89,18 +87,6 @@ class Options:
             type=int,
             default=DEFAULT_VP_SAMPLE_COUNT,
             help=f"number of samples to draw from variational posterior (default: {DEFAULT_VP_SAMPLE_COUNT})"
-        )
-        parser.add_argument(
-            "--mcmc-chains",
-            type=int,
-            default=DEFAULT_MCMC_CHAINS,
-            help=f"number of parallel chains to sample with MCMC (default: {DEFAULT_MCMC_CHAINS})"
-        )
-        parser.add_argument(
-            "--mcmc-sample-count",
-            type=int,
-            default=DEFAULT_MCMC_SAMPLE_COUNT,
-            help=f"number of draws to sample per chain with MCMC (default: {DEFAULT_MCMC_SAMPLE_COUNT})"
         )
         parser.add_argument(
             "--verbose",
