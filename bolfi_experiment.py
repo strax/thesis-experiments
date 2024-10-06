@@ -111,7 +111,7 @@ class BOLFIExperiment:
         sampler = elfi.Rejection(bundle.target, seed=seed, batch_size=1024)
         dprint(f"Running rejection sampler with seed {seed}...")
         timer = Timer()
-        sample: Sample = sampler.sample(2 * options.rejection_sample_count, bar=True)
+        sample: Sample = sampler.sample(options.rejection_sample_count, bar=True)
         dprint(f"Completed in {timer.elapsed}")
         dprint(f"Sample checksum: {compute_sample_checksum(sample)}")
         if options.cache:
