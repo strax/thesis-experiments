@@ -26,6 +26,11 @@ class UnnormalizedJointDistribution(ABC):
 class VBMCModel(UnnormalizedJointDistribution):
     @property
     @abstractmethod
+    def name(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
     def bounds(self) -> Array:
         ...
 

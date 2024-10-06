@@ -13,6 +13,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
+from pathlib import Path
 from zlib import crc32
 
 import numpy as np
@@ -29,15 +30,11 @@ from toolbox import dprint, wprint, iprint, eprint, Timer
 
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
-from bench.vbmc.mcmc import make_sampler
-from bench.vbmc.mcmc.diagnostics import rhat_rank, ess_bulk, ess_tail
 
-
+POSTERIORS_PATH = Path.cwd() / "posteriors"
 
 DEFAULT_TRIALS = 20
 DEFAULT_VP_SAMPLE_COUNT = 1000
-DEFAULT_MCMC_SAMPLE_COUNT = 8196
-DEFAULT_MCMC_CHAINS = 16
 
 @dataclass
 class VBMCInferenceResult:
@@ -125,27 +122,8 @@ def sample_uniform(model, *, seed, sample_shape = ()):
     xmin, xmax = jnp.unstack(model.plausible_bounds)
     return jax.random.uniform(seed, sample_shape + (jnp.size(xmin),), minval=xmin, maxval=xmax)
 
-def get_reference_posterior(model: VBMCModel, key: PRNGKeyArray, *, options: Options, constrained = False):
-    if not constrained:
-        model = model.without_constraints()
-    key, subkey = jax.random.split(key)
-    initial_state = tfp.experimental.mcmc.retry_init(
-        proposal_fn=partial(sample_uniform, model),
-        target_fn=jax.vmap(model.unnormalized_log_prob),
-        sample_shape=(options.mcmc_chains,),
-        max_trials=50,
-        seed=subkey
-    )
-    sampler = make_sampler(model.unnormalized_log_prob, n_samples=options.mcmc_sample_count)
-    key, subkey = jax.random.split(key)
-    dprint(f"Sampling {DEFAULT_MCMC_CHAINS} chains, {options.mcmc_sample_count} draws")
-    chains = sampler(initial_state, subkey)
-    dprint(f"Rhat: {rhat_rank(chains)}")
-    dprint(f"ESS[bulk]: {ess_bulk(chains)}")
-    dprint(f"ESS[tail]: {ess_tail(chains)}")
-    mixed_chains = jnp.reshape(chains, (-1, jnp.size(initial_state, -1)))
-    dprint(f"Sample checksum: {crc32(mixed_chains)}")
-    return mixed_chains
+def get_reference_posterior(model: VBMCModel, *, options: Options, constrained = False):
+    return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
 
 def run_vbmc(model: VBMCModel, *, vbmc_options: VBMCOptions = dict(), key: PRNGKeyArray):
     seed = jax.random.bits(key, dtype=jnp.uint32).item()
@@ -189,7 +167,8 @@ def main():
 
     model = Rosenbrock()
     key = jax.random.key(options.seed)
-    reference_samples = get_reference_posterior(model, key, options=options)
+    reference_samples = get_reference_posterior(model, options=options)
+    dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_samples)}")
     vp = run_vbmc(model, vbmc_options=dict(max_fun_evals=100), key=key)
     dprint(f"Generating {options.vp_sample_count} samples from variational posterior")
     vp_samples, _ = vp.sample(options.vp_sample_count)

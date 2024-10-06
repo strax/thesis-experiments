@@ -21,6 +21,10 @@ class Rosenbrock(VBMCModel):
     constraint: Callable[[Array], Array] | None = None
 
     @property
+    def name(self):
+        return "rosenbrock"
+
+    @property
     def bounds(self):
         return jnp.stack((np.full((1, self.ndim), -np.inf), np.full((1, self.ndim), np.inf)))
 
