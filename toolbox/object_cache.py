@@ -3,7 +3,6 @@ import pickle
 from pathlib import Path
 from dataclasses import dataclass
 from hashlib import sha256
-from multiprocessing import Lock
 
 from .typing import StrPath
 
