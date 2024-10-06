@@ -140,10 +140,12 @@ class VBMCTrialResult:
 def get_reference_posterior(model: VBMCModel, *, options: Options, constrained = False):
     return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
 
-def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, vbmc_options: VBMCOptions = dict()):
+def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_options: VBMCOptions = dict()):
     seed = jax.random.bits(key, dtype=jnp.uint32).item()
 
     vbmc_options.update(display='off')
+    if not verbose:
+        _suppress_noise()
 
     dprint(f"Begin VBMC inference with seed {seed}")
 
@@ -177,7 +179,7 @@ def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, vbmc_options: VBMCOptions =
     )
 
 def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray, options: Options) -> VBMCTrialResult:
-    inference_result = run_vbmc(model, vbmc_options=dict(max_fun_evals=100), key=key)
+    inference_result = run_vbmc(model, vbmc_options=dict(max_fun_evals=100), verbose=options.verbose, key=key)
     dprint(inference_result.message)
     if not inference_result.success:
         wprint("VBMC inference did not converge to a stable solution.")
@@ -210,20 +212,25 @@ def main():
     options = Options.from_args()
     print(options)
 
-    if not options.verbose:
-        _suppress_noise()
-
     model = Rosenbrock()
     reference_posterior = get_reference_posterior(model, options=options)
     dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
 
     key = jax.random.key(options.seed)
+    cluster = dd.LocalCluster()
+    client = cluster.get_client()
+
     experiment_results = []
-
-    experiment_results.append(
-        run_trial(model, key, reference_sample=reference_posterior, options=options)
+    trial_result = client.submit(
+        run_trial,
+        model,
+        key,
+        reference_sample=reference_posterior,
+        options=options
     )
+    experiment_results.append(trial_result)
 
+    experiment_results = client.gather(experiment_results)
     dataframe = pd.DataFrame(map(asdict, experiment_results))
     dataframe = dataframe.set_index("experiment")
     timestamp = str(math.trunc(time.time()))
