@@ -1,4 +1,5 @@
 cache
 bolfi-experiments-*.csv
+vbmc-experiments-*.csv
 __pycache__
 tmp
