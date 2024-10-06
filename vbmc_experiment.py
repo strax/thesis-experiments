@@ -133,6 +133,11 @@ class VBMCTrialResult:
 
     # region Outcomes
     success: bool
+    iterations: int
+    target_evaluations: int
+    reliability_index: float
+    elbo: float
+    elbo_sd: float
     emd: float
     inference_runtime: float
     # endregion
@@ -179,7 +184,7 @@ def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_optio
     )
 
 def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray, options: Options) -> VBMCTrialResult:
-    inference_result = run_vbmc(model, vbmc_options=dict(max_fun_evals=100), verbose=options.verbose, key=key)
+    inference_result = run_vbmc(model, verbose=options.verbose, key=key)
     dprint(inference_result.message)
     if not inference_result.success:
         wprint("VBMC inference did not converge to a stable solution.")
@@ -202,6 +207,11 @@ def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray,
         reference_sample_count=np.size(reference_sample, 0),
         emd=emd,
         success=inference_result.success,
+        iterations=inference_result.iterations,
+        target_evaluations=inference_result.target_evaluations,
+        reliability_index=inference_result.reliability_index,
+        elbo=inference_result.elbo,
+        elbo_sd=inference_result.elbo_sd,
         inference_runtime=inference_result.runtime.total_seconds()
     )
 
@@ -217,20 +227,25 @@ def main():
     dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
 
     key = jax.random.key(options.seed)
-    cluster = dd.LocalCluster()
+    cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
     client = cluster.get_client()
 
     experiment_results = []
-    trial_result = client.submit(
-        run_trial,
-        model,
-        key,
-        reference_sample=reference_posterior,
-        options=options
-    )
-    experiment_results.append(trial_result)
+    for _ in range(options.trials):
+        key, key_trial = jax.random.split(key)
+        trial_result = client.submit(
+            run_trial,
+            model,
+            key_trial,
+            reference_sample=reference_posterior,
+            options=options
+        )
+        experiment_results.append(trial_result)
 
     experiment_results = client.gather(experiment_results)
+
+    client.close()
+
     dataframe = pd.DataFrame(map(asdict, experiment_results))
     dataframe = dataframe.set_index("experiment")
     timestamp = str(math.trunc(time.time()))
