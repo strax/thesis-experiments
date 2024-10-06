@@ -39,5 +39,10 @@ class VBMCModel(UnnormalizedJointDistribution):
     def plausible_bounds(self) -> Array:
         ...
 
+    @property
+    @abstractmethod
+    def constraint(self):
+        ...
+
     def without_constraints(self) -> VBMCModel:
         return self

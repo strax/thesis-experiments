@@ -12,4 +12,7 @@ def cubicline_constraint(theta):
     x, y = jnp.unstack(theta)
     return ((x - 1) ** 3 - y + 1 <= 0) & (x + y - 2 <= 0)
 
-__all__ = ["sinusoid_constraint", "cubicline_constraint"]
+def simple_constraint(theta):
+    return theta[..., 1] >= -0.5
+
+__all__ = ["sinusoid_constraint", "cubicline_constraint", "simple_constraint"]

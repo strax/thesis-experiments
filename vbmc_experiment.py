@@ -12,9 +12,10 @@ import logging
 import sys
 import time
 from argparse import ArgumentParser
+from copy import deepcopy
 from datetime import timedelta
 from dataclasses import dataclass, asdict
-from typing import Any
+from typing import Any, Sequence
 from pathlib import Path
 from zlib import crc32
 
@@ -32,11 +33,12 @@ from toolbox import dprint, wprint, iprint, Timer
 
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
+from bench.vbmc.constraints import simple_constraint
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
 DEFAULT_TRIALS = 20
-DEFAULT_VP_SAMPLE_COUNT = 1000
+DEFAULT_VP_SAMPLE_COUNT = 400000
 
 @dataclass
 class VBMCInferenceResult:
@@ -122,6 +124,7 @@ class VBMCTrialResult:
     # region Identifiers
     experiment: str
     seed: int
+    feasibility_estimator: str
     # endregion
 
     # region Configuration
@@ -183,8 +186,17 @@ def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_optio
         elbo_sd=results['elbo_sd']
     )
 
-def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray, options: Options) -> VBMCTrialResult:
-    inference_result = run_vbmc(model, verbose=options.verbose, key=key)
+def _suppress_noise():
+    logging.disable()
+
+def run_trial(name: str, model: VBMCModel, key: PRNGKeyArray, *, feasibility_estimator: FeasibilityEstimator | None = None, reference_sample: NDArray, options: Options) -> VBMCTrialResult:
+    inference_result = run_vbmc(
+        model,
+        key=key,
+        verbose=options.verbose,
+        vbmc_options=dict(feasibility_estimator=feasibility_estimator),
+    )
+
     dprint(inference_result.message)
     if not inference_result.success:
         wprint("VBMC inference did not converge to a stable solution.")
@@ -195,17 +207,19 @@ def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray,
     dprint(f"Generating {options.vp_sample_count} samples from variational posterior")
     vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
     dprint(f"Sample checksum: {crc32(vp_samples)}")
+
     emd = emd_samples(reference_sample, vp_samples)
     iprint(f"EMD: {emd}")
 
     return VBMCTrialResult(
-        experiment=model.name,
-        seed=inference_result.seed,
+        experiment=name,
+        feasibility_estimator=feasibility_estimator.__class__.__name__ if feasibility_estimator is not None else "",
         vp_sample_checksum=crc32(vp_samples),
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
         emd=emd,
+        seed=inference_result.seed,
         success=inference_result.success,
         iterations=inference_result.iterations,
         target_evaluations=inference_result.target_evaluations,
@@ -215,32 +229,64 @@ def run_trial(model: VBMCModel, key: PRNGKeyArray, *, reference_sample: NDArray,
         inference_runtime=inference_result.runtime.total_seconds()
     )
 
-def _suppress_noise():
-    logging.disable()
+def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client) -> Sequence[VBMCTrialResult]:
+    model = experiment.model
+
+    reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
+    dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
+
+    # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
+    feasibility_estimators = [None]
+    if model.constraint is not None:
+        feasibility_estimators.extend([OracleFeasibilityEstimator(model.constraint), GPCFeasibilityEstimator()])
+
+    trial_results = []
+
+    for feasibility_estimator in feasibility_estimators:
+        key_experiment = key
+        for _ in range(options.trials):
+            key_experiment, key_trial = jax.random.split(key_experiment)
+            trial_result = client.submit(
+                run_trial,
+                experiment.name,
+                model,
+                key_trial,
+                feasibility_estimator=deepcopy(feasibility_estimator),
+                reference_sample=reference_posterior,
+                options=options
+            )
+            trial_results.append(trial_result)
+
+    return trial_results
+
+
+@dataclass(kw_only=True)
+class VBMCExperiment:
+    name: str
+    model: VBMCModel
 
 def main():
     options = Options.from_args()
     print(options)
 
-    model = Rosenbrock()
-    reference_posterior = get_reference_posterior(model, options=options)
-    dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
+    experiments = [
+        VBMCExperiment(
+            name="rosenbrock",
+            model=Rosenbrock()
+        ),
+        VBMCExperiment(
+            name="rosenbrock+simple_constraint",
+            model=Rosenbrock().with_constraint(simple_constraint)
+        )
+    ]
 
     key = jax.random.key(options.seed)
     cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
     client = cluster.get_client()
 
     experiment_results = []
-    for _ in range(options.trials):
-        key, key_trial = jax.random.split(key)
-        trial_result = client.submit(
-            run_trial,
-            model,
-            key_trial,
-            reference_sample=reference_posterior,
-            options=options
-        )
-        experiment_results.append(trial_result)
+    for experiment in experiments:
+        experiment_results.extend(run_experiment(experiment, key, options=options, client=client))
 
     experiment_results = client.gather(experiment_results)
 
