@@ -26,8 +26,7 @@ from numpy.random import SeedSequence
 from numpy.typing import NDArray
 from pyemd import emd_samples
 
-from toolbox import ObjectCache, Timer, dprint, iprint, wprint
-
+from bench import ObjectCache, Timer, dprint, iprint, wprint
 from bench.elfi.tasks import ELFIModelBuilder
 from bench.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
 

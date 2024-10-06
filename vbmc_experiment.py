@@ -30,8 +30,8 @@ from pyemd import emd_samples
 from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
-from toolbox import Timer
 
+from bench import Timer
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
 from bench.vbmc.constraints import simple_constraint
