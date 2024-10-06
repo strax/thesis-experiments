@@ -21,6 +21,7 @@ dependencies:
     - "multipledispatch"
     - "pyemd"
     - "pylint"
+    - "pytest"
     - "pytorch-minimize"
     - "structlog"
     - "tfp-nightly"
