@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import timedelta
 from dataclasses import dataclass, asdict
+from fnmatch import fnmatch
 from typing import Any, Sequence
 from pathlib import Path
 from zlib import crc32
@@ -305,6 +306,17 @@ def main():
             model=Rosenbrock().with_constraint(simple_constraint)
         )
     ]
+
+    if options.filter:
+        experiments = [
+            experiment
+            for experiment in experiments
+            if fnmatch(experiment.name, options.filter)
+        ]
+    if options.dry_run:
+        for experiment in experiments:
+            print(experiment.name)
+        return
 
     key = jax.random.key(options.seed)
     cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
