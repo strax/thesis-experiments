@@ -22,6 +22,7 @@ dependencies:
     - "pyemd"
     - "pylint"
     - "pytorch-minimize"
+    - "structlog"
     - "tfp-nightly"
     - "git+https://github.com/cornellius-gp/linear_operator.git"
     - "git+https://github.com/cornellius-gp/gpytorch.git"

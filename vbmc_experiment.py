@@ -11,6 +11,7 @@ import math
 import logging
 import sys
 import time
+import structlog
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import timedelta
@@ -29,7 +30,7 @@ from pyemd import emd_samples
 from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
-from toolbox import dprint, wprint, iprint, Timer
+from toolbox import Timer
 
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
@@ -115,6 +116,7 @@ class VBMCInferenceResult:
     iterations: int
     target_evaluations: int
     success: bool
+    convergence_status: str
     reliability_index: float
     elbo: float
     elbo_sd: float
@@ -135,6 +137,7 @@ class VBMCTrialResult:
     # endregion
 
     # region Outcomes
+    convergence_status: str
     success: bool
     iterations: int
     target_evaluations: int
@@ -148,14 +151,21 @@ class VBMCTrialResult:
 def get_reference_posterior(model: VBMCModel, *, options: Options, constrained = False):
     return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
 
-def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_options: VBMCOptions = dict()):
+def run_vbmc(
+    model: VBMCModel,
+    key: PRNGKeyArray,
+    *,
+    verbose=False,
+    vbmc_options: VBMCOptions = dict(),
+    logger: structlog.stdlib.BoundLogger
+):
     seed = jax.random.bits(key, dtype=jnp.uint32).item()
 
     vbmc_options.update(display='off')
     if not verbose:
         _suppress_noise()
 
-    dprint(f"Begin VBMC inference with seed {seed}")
+    logger.debug(f"Begin VBMC inference with seed {seed}")
 
     # Seed numpy random state from JAX PRNG
     np.random.seed(seed)
@@ -181,6 +191,7 @@ def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_optio
         iterations=results['iterations'],
         target_evaluations=results['func_count'],
         success=results['success_flag'],
+        convergence_status=results['convergence_status'],
         reliability_index=results['r_index'],
         elbo=results['elbo'],
         elbo_sd=results['elbo_sd']
@@ -189,27 +200,37 @@ def run_vbmc(model: VBMCModel, key: PRNGKeyArray, *, verbose = False, vbmc_optio
 def _suppress_noise():
     logging.disable()
 
-def run_trial(name: str, model: VBMCModel, key: PRNGKeyArray, *, feasibility_estimator: FeasibilityEstimator | None = None, reference_sample: NDArray, options: Options) -> VBMCTrialResult:
+def run_trial(
+    name: str,
+    model: VBMCModel,
+    key: PRNGKeyArray,
+    *,
+    feasibility_estimator: FeasibilityEstimator | None = None,
+    reference_sample: NDArray,
+    options: Options,
+    logger: structlog.stdlib.BoundLogger
+) -> VBMCTrialResult:
     inference_result = run_vbmc(
         model,
         key=key,
         verbose=options.verbose,
         vbmc_options=dict(feasibility_estimator=feasibility_estimator),
+        logger=logger
     )
 
-    dprint(inference_result.message)
+    logger.debug(inference_result.message)
     if not inference_result.success:
-        wprint("VBMC inference did not converge to a stable solution.")
+        logger.warning("VBMC inference did not converge to a stable solution.")
     else:
-        iprint(f"Inference completed in {inference_result.runtime}")
-        dprint(f"ELBO: {inference_result.elbo:.6f} ± {inference_result.elbo_sd:.6f}")
+        logger.info(f"Inference completed in {inference_result.runtime}")
+        logger.debug(f"ELBO: {inference_result.elbo:.6f} ± {inference_result.elbo_sd:.6f}")
 
-    dprint(f"Generating {options.vp_sample_count} samples from variational posterior")
+    logger.debug(f"Generating {options.vp_sample_count} samples from variational posterior")
     vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
-    dprint(f"Sample checksum: {crc32(vp_samples)}")
+    logger.debug(f"Sample checksum: {crc32(vp_samples)}")
 
     emd = emd_samples(reference_sample, vp_samples)
-    iprint(f"EMD: {emd}")
+    logger.info(f"EMD: {emd}")
 
     return VBMCTrialResult(
         experiment=name,
@@ -221,6 +242,7 @@ def run_trial(name: str, model: VBMCModel, key: PRNGKeyArray, *, feasibility_est
         emd=emd,
         seed=inference_result.seed,
         success=inference_result.success,
+        convergence_status=inference_result.convergence_status,
         iterations=inference_result.iterations,
         target_evaluations=inference_result.target_evaluations,
         reliability_index=inference_result.reliability_index,
@@ -229,11 +251,12 @@ def run_trial(name: str, model: VBMCModel, key: PRNGKeyArray, *, feasibility_est
         inference_runtime=inference_result.runtime.total_seconds()
     )
 
-def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client) -> Sequence[VBMCTrialResult]:
+def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: structlog.stdlib.BoundLogger) -> Sequence[VBMCTrialResult]:
+    logger = logger.bind(experiment=experiment.name)
     model = experiment.model
 
     reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
-    dprint(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
+    logger.debug(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
 
     # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
     feasibility_estimators = [None]
@@ -244,13 +267,14 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
 
     for feasibility_estimator in feasibility_estimators:
         key_experiment = key
-        for _ in range(options.trials):
+        for i in range(options.trials):
             key_experiment, key_trial = jax.random.split(key_experiment)
             trial_result = client.submit(
                 run_trial,
                 experiment.name,
                 model,
                 key_trial,
+                logger=logger.bind(trial=i),
                 feasibility_estimator=deepcopy(feasibility_estimator),
                 reference_sample=reference_posterior,
                 options=options
@@ -269,6 +293,8 @@ def main():
     options = Options.from_args()
     print(options)
 
+    logger = structlog.stdlib.get_logger()
+
     experiments = [
         VBMCExperiment(
             name="rosenbrock",
@@ -286,7 +312,9 @@ def main():
 
     experiment_results = []
     for experiment in experiments:
-        experiment_results.extend(run_experiment(experiment, key, options=options, client=client))
+        experiment_results.extend(
+            run_experiment(experiment, key, options=options, client=client, logger=logger)
+        )
 
     experiment_results = client.gather(experiment_results)
 
@@ -297,7 +325,7 @@ def main():
     timestamp = str(math.trunc(time.time()))
 
     filename = f"vbmc-experiments-{timestamp}.csv"
-    iprint(f"Saving results to {filename}")
+    logger.info(f"Saving results to {filename}")
     dataframe.to_csv(filename)
 
 if __name__ == '__main__':
