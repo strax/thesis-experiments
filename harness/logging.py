@@ -59,20 +59,4 @@ type Logger = BoundLogger
 def get_logger() -> Logger:
     return structlog.stdlib.get_logger()
 
-def dprint(message: str):
-    print(f"[*] {message}", flush=True, file=sys.stdout)
-
-
-def iprint(message: str):
-    print(f"[+] {message}", flush=True, file=sys.stdout)
-
-
-def wprint(message: str):
-    print(f"[!] {message}", flush=True, file=sys.stderr)
-
-
-def eprint(message: str):
-    print(f"[-] {message}", flush=True, file=sys.stderr)
-
-
-__all__ = ["dprint", "iprint", "wprint", "eprint", "get_logger", "Logger"]
+__all__ = ["configure_logging", "get_logger", "Logger"]

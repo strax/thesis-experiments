@@ -28,7 +28,7 @@ from numpy.typing import NDArray
 
 from harness.elfi.tasks import ELFIModelBuilder
 from harness.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
-from harness.logging import dprint, wprint, iprint
+from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.object_cache import ObjectCache
 from harness.timer import Timer
@@ -88,6 +88,7 @@ class BOLFIExperiment:
     feasibility_estimator_factory: Any
     bolfi_kwargs: dict[str, Any]
     obs: NDArray[np.float64]
+    logger: Logger
 
     def __init__(
         self,
@@ -102,27 +103,25 @@ class BOLFIExperiment:
         self.feasibility_estimator = deepcopy(feasibility_estimator)
         self.bolfi_kwargs = kwargs
 
-    def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
+    def run_rejection_sampler(self, seed: SeedSequence, *, options: Options, logger: Logger) -> Sample:
         seed = seed.generate_state(1).item()
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
         if options.cache and (cached_sample := OBJECT_CACHE.get(cache_key)):
-            dprint(f"Found cached rejection samples for seed {seed}")
-            dprint(f"Sample checksum: {compute_sample_checksum(cached_sample)}")
+            logger.debug(f"Found cached rejection samples", seed=seed, checksum=compute_sample_checksum(cached_sample))
             return cached_sample
 
         bundle = self.model_builder.build_model()
         sampler = elfi.Rejection(bundle.target, seed=seed, batch_size=1024)
-        dprint(f"Running rejection sampler with seed {seed}...")
+        logger.debug(f"Running rejection sampler", seed=seed)
         timer = Timer()
-        sample: Sample = sampler.sample(options.rejection_sample_count, bar=True)
-        dprint(f"Completed in {timer.elapsed}")
-        dprint(f"Sample checksum: {compute_sample_checksum(sample)}")
+        sample: Sample = sampler.sample(options.rejection_sample_count, bar=False)
+        logger.debug(f"Rejection sampling completed in {timer.elapsed}", checksum=compute_sample_checksum(sample))
         if options.cache:
             OBJECT_CACHE.put(cache_key, sample)
         return sample
 
     def run_bolfi(
-        self, seed: int, *, options: Options
+        self, seed: int, *, logger: Logger, options: Options
     ) -> BOLFIResult:
         bundle = self.model_builder.build_model()
 
@@ -140,21 +139,20 @@ class BOLFIExperiment:
             max_parallel_batches=1,
             **self.bolfi_kwargs,
         )
-        dprint(f"Running BOLFI inference with seed {seed}...")
+        logger.debug(f"Running BOLFI inference", seed=seed)
         timer = Timer()
-        bolfi.fit(n_evidence=200, bar=True)
+        bolfi.fit(n_evidence=200, bar=False)
         inference_runtime = timer.elapsed
-        dprint(f"Inference completed in {inference_runtime}")
-        dprint(f"Failures: {bolfi.n_failures}")
+        logger.debug(f"Inference completed in {inference_runtime}", failures=bolfi.n_failures)
 
-        dprint("Sampling from BOLFI posterior...")
+        logger.debug("Sampling from BOLFI posterior")
         try:
             sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
         except ValueError as err:
-            wprint(str(err))
+            logger.warning(str(err))
             sample = None
         else:
-            dprint(f"Sampling completed in {timer.elapsed}")
+            logger.debug(f"Sampling completed in {timer.elapsed}", checksum=compute_sample_checksum(sample))
         return BOLFIResult(
             inference_runtime=inference_runtime.total_seconds(),
             n_evidence=bolfi.n_evidence,
@@ -165,10 +163,12 @@ class BOLFIExperiment:
         )
 
     def run_trial(
-        self, seed: int, reference_sample: Sample, *, options: Options
+        self, seed: int, reference_sample: Sample, *, options: Options, logger: Logger
     ) -> TrialResult:
+        logger.info("Executing task")
+
         bolfi_result = self.run_bolfi(
-            seed, options=options
+            seed, options=options, logger=logger
         )
 
         if bolfi_result.sample is not None:
@@ -179,11 +179,12 @@ class BOLFIExperiment:
                 reference_sample.samples_array, bolfi_result.sample.samples_array
             ).mean()
             sample_checksum = compute_sample_checksum(bolfi_result.sample)
-            dprint(f"Sample checksum: {sample_checksum}")
         else:
             sample_checksum = 0
             gskl = np.nan
             mmtv = np.nan
+
+        logger.info("Task completed")
         return TrialResult(
             bolfi_sample_checksum=sample_checksum,
             bolfi_sample_count=bolfi_result.sample.n_samples,
@@ -200,16 +201,19 @@ class BOLFIExperiment:
             update_interval=bolfi_result.update_interval,
         )
 
-    def run(self, seed: SeedSequence, *, options: Options) -> Iterable[TrialResult]:
-        reference_sample = self.run_rejection_sampler(seed, options=options)
+    def run(self, seed: SeedSequence, *, options: Options, logger: Logger) -> Iterable[TrialResult]:
+        reference_sample = self.run_rejection_sampler(seed, options=options, logger=logger)
 
         results = []
         for i in range(options.trials):
-            print()
-            iprint(f"Trial #{i + 1}")
             seed, subseed = seed.spawn(2)
 
-            result = self.run_trial(subseed.generate_state(1).item(), reference_sample, options=options)
+            result = self.run_trial(
+                subseed.generate_state(1).item(),
+                reference_sample,
+                options=options,
+                logger=logger.bind(task=(self.name, i))
+            )
             results.append(result)
         return results
 
@@ -221,6 +225,7 @@ class Options:
     seed: int
     trials: int
     elfi_client: str
+    verbose: bool
     filter: str | None = None
     dry_run: bool = False
     no_cache: bool = False
@@ -283,6 +288,11 @@ class Options:
             help="ELFI client to use. Available choices: native, multiprocessing, dask (default: native)",
             choices=['native', 'multiprocessing', 'dask']
         )
+        parser.add_argument(
+            "--verbose",
+            action="store_true",
+            help="enable verbose output"
+        )
         ns = parser.parse_args()
         return cls(**vars(ns))
 
@@ -296,6 +306,9 @@ class Options:
 
 def main():
     options = Options.from_args()
+
+    configure_logging(options.verbose)
+    logger = get_logger()
 
     experiments: List[BOLFIExperiment] = []
     experiments.append(BOLFIExperiment(name="gauss_nd_mean/base", model_builder=Gauss2D(seed=options.seed)))
@@ -340,30 +353,29 @@ def main():
 
     elfi.set_client(options.elfi_client)
 
-    dprint(f"ELFI client: {options.elfi_client}")
-    dprint(f"Seed: {options.seed}")
-    dprint(f"Trials: {options.trials}")
-    dprint(f"Rejection sample count: {options.rejection_sample_count}")
+    logger.debug(f"ELFI client: {options.elfi_client}")
+    logger.debug(f"Seed: {options.seed}")
+    logger.debug(f"Trials: {options.trials}")
+    logger.debug(f"Rejection sample count: {options.rejection_sample_count}")
 
     if not options.cache:
-        dprint("Rejection sample cache is disabled")
+        logger.debug("Rejection sample cache is disabled")
 
     timer = Timer()
     experiment_results: List[TrialResult] = []
     for experiment in experiments:
-        print()
-        iprint(f"Running experiment: {experiment.name}")
-        trial_results = experiment.run(SeedSequence(options.seed), options=options)
+        logger.debug(f"Running experiment: {experiment.name}")
+        trial_results = experiment.run(SeedSequence(options.seed), options=options, logger=logger.bind(task=experiment.name))
         experiment_results.extend(trial_results)
 
-    dprint(f"Total runtime: {timer.elapsed}")
+    logger.debug(f"Total runtime: {timer.elapsed}")
 
     dataframe = pd.DataFrame(map(asdict, experiment_results))
     dataframe = dataframe.set_index("experiment")
     timestamp = str(math.trunc(time()))
 
     filename = f"bolfi-experiments-{timestamp}.csv"
-    iprint(f"Saving results to {filename}")
+    logger.info(f"Saving results to {filename}")
     dataframe.to_csv(filename)
 
 
