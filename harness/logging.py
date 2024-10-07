@@ -51,7 +51,7 @@ def configure_logging(verbose = False):
             renderer
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG if verbose else logging.INFO),
-        logger_factory=structlog.PrintLoggerFactory()
+        logger_factory=structlog.PrintLoggerFactory(sys.stderr)
     )
 
 type Logger = BoundLogger
