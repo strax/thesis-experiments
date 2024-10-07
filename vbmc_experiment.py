@@ -31,12 +31,12 @@ from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 
-from bench import Timer
-from bench.vbmc.tasks import VBMCModel
-from bench.vbmc.tasks.rosenbrock import Rosenbrock
-from bench.vbmc.constraints import simple_constraint
-from bench.vbmc.helpers import count_failed_evaluations, get_timings_pytree
-from bench.metrics import gauss_symm_kl_divergence, marginal_total_variation
+from harness import Timer
+from harness.vbmc.tasks import VBMCModel
+from harness.vbmc.tasks.rosenbrock import Rosenbrock
+from harness.vbmc.constraints import simple_constraint
+from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
+from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 

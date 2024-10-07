@@ -6,7 +6,7 @@ from pyvbmc import VariationalPosterior
 from numpy.testing import assert_equal
 from numpy.typing import NDArray
 
-from bench.metrics import marginal_total_variation
+from harness.metrics import marginal_total_variation
 
 DATADIR = Path(__file__).parent / "data"
 

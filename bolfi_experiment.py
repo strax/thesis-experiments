@@ -25,10 +25,10 @@ from elfi.methods.results import BolfiSample, Sample
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
 
-from bench import ObjectCache, Timer, dprint, iprint, wprint
-from bench.metrics import gauss_symm_kl_divergence, marginal_total_variation
-from bench.elfi.tasks import ELFIModelBuilder
-from bench.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
+from harness import ObjectCache, Timer, dprint, iprint, wprint
+from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
+from harness.elfi.tasks import ELFIModelBuilder
+from harness.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
 
 OBJECT_CACHE = ObjectCache(Path.cwd() / "cache")
 
