@@ -36,6 +36,7 @@ from bench import Timer
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
 from bench.vbmc.constraints import simple_constraint
+from bench.metrics import wasserstein_distance, gskl, marginal_total_variation
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -145,8 +146,13 @@ class VBMCTrialResult:
     reliability_index: float
     elbo: float
     elbo_sd: float
-    emd: float
     inference_runtime: float
+    # endregion
+
+    # region Metrics
+    emd: float
+    gskl: float
+    mmtv: float
     # endregion
 
 def get_reference_posterior(model: VBMCModel, *, options: Options, constrained = False):
@@ -230,9 +236,6 @@ def run_trial(
     vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
     logger.debug(f"Sample checksum: {crc32(vp_samples)}")
 
-    emd = emd_samples(reference_sample, vp_samples)
-    logger.info(f"EMD: {emd}")
-
     return VBMCTrialResult(
         experiment=name,
         feasibility_estimator=feasibility_estimator.__class__.__name__ if feasibility_estimator is not None else "",
@@ -240,7 +243,9 @@ def run_trial(
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
-        emd=emd,
+        emd=wasserstein_distance(reference_sample, vp_samples),
+        gskl=gskl(reference_sample, vp_samples),
+        mmtv=marginal_total_variation(reference_sample, vp_samples).mean(),
         seed=inference_result.seed,
         success=inference_result.success,
         convergence_status=inference_result.convergence_status,
