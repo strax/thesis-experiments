@@ -11,7 +11,6 @@ import math
 import logging
 import sys
 import time
-import structlog
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import timedelta
@@ -31,6 +30,7 @@ from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 
+from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
 from harness.vbmc.constraints import simple_constraint
@@ -172,7 +172,7 @@ def run_vbmc(
     *,
     verbose=False,
     vbmc_options: VBMCOptions = dict(),
-    logger: structlog.stdlib.BoundLogger
+    logger: Logger
 ):
     seed = jax.random.bits(key, dtype=jnp.uint32).item()
 
@@ -180,7 +180,7 @@ def run_vbmc(
     if not verbose:
         _suppress_noise()
 
-    logger.debug(f"Begin VBMC inference with seed {seed}")
+    logger.debug(f"Begin VBMC inference", seed=seed)
 
     # Seed numpy random state from JAX PRNG
     np.random.seed(seed)
@@ -229,8 +229,10 @@ def run_trial(
     feasibility_estimator: FeasibilityEstimator | None = None,
     reference_sample: NDArray,
     options: Options,
-    logger: structlog.stdlib.BoundLogger
+    logger: Logger
 ) -> VBMCTrialResult:
+    logger.info("Executing task")
+
     inference_result = run_vbmc(
         model,
         key=key,
@@ -243,12 +245,12 @@ def run_trial(
     if not inference_result.success:
         logger.warning("VBMC inference did not converge to a stable solution.")
     else:
-        logger.info(f"Inference completed in {timedelta(seconds=inference_result.runtime)}")
-        logger.debug(f"ELBO: {inference_result.elbo:.6f} ± {inference_result.elbo_sd:.6f}")
+        logger.debug(f"Inference completed in {timedelta(seconds=inference_result.runtime)}", elbo=inference_result.elbo, elbo_sd=inference_result.elbo_sd)
 
-    logger.debug(f"Generating {options.vp_sample_count} samples from variational posterior")
     vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
-    logger.debug(f"Sample checksum: {crc32(vp_samples)}")
+    logger.debug(f"Generated {options.vp_sample_count} samples from variational posterior", checksum=crc32(vp_samples))
+
+    logger.info("Task completed")
 
     return VBMCTrialResult(
         experiment=name,
@@ -274,12 +276,12 @@ def run_trial(
         fe_optimize_runtime=inference_result.fe_optimize_runtime
     )
 
-def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: structlog.stdlib.BoundLogger) -> Sequence[VBMCTrialResult]:
-    logger = logger.bind(experiment=experiment.name)
+def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: Logger) -> Sequence[VBMCTrialResult]:
+    logger = logger.bind(task=experiment.name)
     model = experiment.model
 
     reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
-    logger.debug(f"Loaded reference posterior, sample checksum: {crc32(reference_posterior)}")
+    logger.debug(f"Loaded reference posterior", checksum=crc32(reference_posterior))
 
     # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
     feasibility_estimators = [None]
@@ -297,7 +299,7 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
                 experiment.name,
                 model,
                 key_trial,
-                logger=logger.bind(trial=i),
+                logger=logger.bind(task=(experiment.name, i)),
                 feasibility_estimator=deepcopy(feasibility_estimator),
                 reference_sample=reference_posterior,
                 options=options
@@ -316,7 +318,8 @@ def main():
     options = Options.from_args()
     print(options)
 
-    logger = structlog.stdlib.get_logger()
+    configure_logging(options.verbose)
+    logger = get_logger()
 
     experiments = [
         VBMCExperiment(
