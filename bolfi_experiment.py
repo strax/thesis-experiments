@@ -131,7 +131,7 @@ class BOLFIExperiment:
         bolfi = elfi.BOLFI(
             bundle.target,
             batch_size=1,
-            initial_evidence=20,
+            initial_evidence=10,
             update_interval=10,
             bounds=self.model_builder.bounds,
             acq_noise_var=0,
@@ -142,7 +142,7 @@ class BOLFIExperiment:
         )
         dprint(f"Running BOLFI inference with seed {seed}...")
         timer = Timer()
-        bolfi.fit(n_evidence=100, bar=True)
+        bolfi.fit(n_evidence=200, bar=True)
         inference_runtime = timer.elapsed
         dprint(f"Inference completed in {inference_runtime}")
         dprint(f"Failures: {bolfi.n_failures}")
