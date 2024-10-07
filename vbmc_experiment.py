@@ -17,7 +17,7 @@ from copy import deepcopy
 from datetime import timedelta
 from dataclasses import dataclass, asdict
 from fnmatch import fnmatch
-from typing import Any, Sequence
+from typing import Any, Dict, Sequence
 from pathlib import Path
 from zlib import crc32
 
@@ -35,6 +35,7 @@ from bench import Timer
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
 from bench.vbmc.constraints import simple_constraint
+from bench.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from bench.metrics import gauss_symm_kl_divergence, marginal_total_variation
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
@@ -113,14 +114,19 @@ class VBMCInferenceResult:
     vp: VariationalPosterior
     seed: int
     message: str
-    runtime: timedelta
     iterations: int
     target_evaluations: int
+    failed_evaluations: int
     success: bool
     convergence_status: str
     reliability_index: float
     elbo: float
     elbo_sd: float
+    runtime: float
+    fe_update_runtime: float
+    fe_predict_runtime: float
+    fe_optimize_runtime: float
+
 
 @dataclass(kw_only=True)
 class VBMCTrialResult:
@@ -142,10 +148,14 @@ class VBMCTrialResult:
     success: bool
     iterations: int
     target_evaluations: int
+    failed_evaluations: int
     reliability_index: float
     elbo: float
     elbo_sd: float
     inference_runtime: float
+    fe_update_runtime: float
+    fe_predict_runtime: float
+    fe_optimize_runtime: float
     # endregion
 
     # region Metrics
@@ -187,14 +197,20 @@ def run_vbmc(
     vp, results = vbmc.optimize()
     elapsed = timer.elapsed
 
+    failed_evaluations = count_failed_evaluations(vbmc)
+    aggregate_timings: Dict[str, float] = jax.tree.map(math.fsum, get_timings_pytree(vbmc))
 
     return VBMCInferenceResult(
         vp=vp,
         seed=seed,
         message=results['message'],
-        runtime=elapsed,
+        runtime=elapsed.total_seconds(),
+        fe_update_runtime=aggregate_timings.get("fe_update", np.nan),
+        fe_predict_runtime=aggregate_timings.get("fe_predict", np.nan),
+        fe_optimize_runtime=aggregate_timings.get("fe_optimize", np.nan),
         iterations=results['iterations'],
         target_evaluations=results['func_count'],
+        failed_evaluations=failed_evaluations,
         success=results['success_flag'],
         convergence_status=results['convergence_status'],
         reliability_index=results['r_index'],
@@ -227,7 +243,7 @@ def run_trial(
     if not inference_result.success:
         logger.warning("VBMC inference did not converge to a stable solution.")
     else:
-        logger.info(f"Inference completed in {inference_result.runtime}")
+        logger.info(f"Inference completed in {timedelta(seconds=inference_result.runtime)}")
         logger.debug(f"ELBO: {inference_result.elbo:.6f} ± {inference_result.elbo_sd:.6f}")
 
     logger.debug(f"Generating {options.vp_sample_count} samples from variational posterior")
@@ -248,10 +264,14 @@ def run_trial(
         convergence_status=inference_result.convergence_status,
         iterations=inference_result.iterations,
         target_evaluations=inference_result.target_evaluations,
+        failed_evaluations=inference_result.failed_evaluations,
         reliability_index=inference_result.reliability_index,
         elbo=inference_result.elbo,
         elbo_sd=inference_result.elbo_sd,
-        inference_runtime=inference_result.runtime.total_seconds()
+        inference_runtime=inference_result.runtime,
+        fe_update_runtime=inference_result.fe_update_runtime,
+        fe_predict_runtime=inference_result.fe_predict_runtime,
+        fe_optimize_runtime=inference_result.fe_optimize_runtime
     )
 
 def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: structlog.stdlib.BoundLogger) -> Sequence[VBMCTrialResult]:
