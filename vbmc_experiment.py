@@ -16,8 +16,10 @@ from copy import deepcopy
 from datetime import timedelta
 from dataclasses import dataclass, asdict
 from fnmatch import fnmatch
-from typing import Any, Dict, Sequence
+from io import StringIO
+from typing import Any, Dict, Iterable, Sequence
 from pathlib import Path
+from itertools import product
 from zlib import crc32
 
 import numpy as np
@@ -26,9 +28,11 @@ import dask.distributed as dd
 import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
 from numpy.typing import NDArray
+from numpy.random import SeedSequence
 from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
+from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
@@ -53,7 +57,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
                 "constraint cannot be None when using oracle feasibility estimation"
             )
             return OracleFeasibilityEstimator(constraint)
-        case FeasibilityEstimatorKind.GPC_MATERN:
+        case FeasibilityEstimatorKind.GPC_MATERN52:
             return GPCFeasibilityEstimator()
 
 
@@ -70,7 +74,9 @@ class Options:
     verbose: bool
     vp_sample_count: int
     filter: str | None = None
+    show_plan: bool = False
     dry_run: bool = False
+    task_id: int | None = None
 
     @property
     def cache(self):
@@ -80,9 +86,20 @@ class Options:
     def from_args(cls):
         parser = ArgumentParser()
         parser.add_argument(
-            "--dry-run",
-            help="print experiments without running them",
+            "--show-plan",
+            help="print task plan to stdout and exit",
             action="store_true",
+        )
+        parser.add_argument(
+            "--dry-run",
+            help="do not actually run tasks, just show what would be executed",
+            action="store_true"
+        )
+        parser.add_argument(
+            "--task-id",
+            type=int,
+            metavar="ID",
+            help="execute a single task from the plan as a part of a HPC array job"
         )
         parser.add_argument(
             "--filter",
@@ -294,6 +311,28 @@ def run_trial(
         fe_optimize_runtime=inference_result.fe_optimize_runtime
     )
 
+def run_trial_ext(
+    name: str,
+    model: VBMCInferenceProblem,
+    seed: int,
+    *,
+    feasibility_estimator: FeasibilityEstimatorKind,
+    options: Options,
+    logger: Logger
+):
+    reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
+    logger.debug(f"Loaded reference posterior", checksum=crc32(reference_posterior))
+
+    return run_trial(
+        name,
+        model,
+        jax.random.key(seed),
+        logger=logger,
+        feasibility_estimator=feasibility_estimator,
+        reference_sample=reference_posterior,
+        options=options
+    )
+
 def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: Logger) -> Sequence[VBMCTrialResult]:
     logger = logger.bind(task=experiment.name)
     model = experiment.model
@@ -333,9 +372,59 @@ class VBMCExperiment:
     name: str
     model: VBMCInferenceProblem
 
+def seed2int(seed: SeedSequence):
+    return seed.generate_state(1).item()
+
+@dataclass(kw_only=True)
+class VBMCTrial:
+    experiment: VBMCExperiment
+    index: int
+    seed: SeedSequence
+    feasibility_estimator: FeasibilityEstimatorKind
+
+    @property
+    def model(self):
+        return self.experiment.model
+
+    @property
+    def name(self):
+        return f"{self.experiment.name}/{self.index}"
+
+    def __call__(self, *, options: Options, logger: Logger):
+        return run_trial_ext(
+            self.experiment.name,
+            self.experiment.model,
+            seed2int(self.seed),
+            feasibility_estimator=self.feasibility_estimator,
+            options=options,
+            logger=logger
+        )
+
+def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n_trials: int):
+    # Trials
+    for (experiment, (i, subseed)) in product(experiments, enumerate(seed.spawn(n_trials))):
+        if experiment.model.constraint is None:
+            feasibility_estimators = [FeasibilityEstimatorKind.NONE]
+        else:
+            feasibility_estimators = list(FeasibilityEstimatorKind)
+
+        for feasibility_estimator in feasibility_estimators:
+            yield VBMCTrial(
+                experiment=experiment,
+                index=i,
+                seed=deepcopy(subseed),
+                feasibility_estimator=feasibility_estimator
+            )
+
+def print_task_plan(tasks: Iterable[VBMCTrial]):
+    rows = []
+    for i, trial in enumerate(tasks):
+        rows.append([i, trial.experiment.name, trial.feasibility_estimator, seed2int(trial.seed)])
+    print(tabulate(rows, headers=("ID", "Experiment", "Feasibility estimator", "Seed")))
+
 def main():
     options = Options.from_args()
-    print(options)
+    seed = SeedSequence(options.seed)
 
     configure_logging(options.verbose)
     logger = get_logger()
@@ -351,38 +440,44 @@ def main():
         )
     ]
 
+    tasks = list(generate_trials(experiments, seed, options.trials))
+
     if options.filter:
         experiments = [
             experiment
             for experiment in experiments
             if fnmatch(experiment.name, options.filter)
         ]
-    if options.dry_run:
-        for experiment in experiments:
-            print(experiment.name)
+
+    if options.show_plan:
+        print_task_plan(tasks)
         return
 
-    key = jax.random.key(options.seed)
+    if (task_id := options.task_id) is not None:
+        if task_id > len(tasks):
+            logger.error("invalid task id")
+            return
+        result = tasks[task_id](options=options, logger=logger)
+        pd.DataFrame([asdict(result)]).to_csv(sys.stdout, index=False)
+        return
+
     cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
     client = cluster.get_client()
 
-    experiment_results = []
-    for experiment in experiments:
-        experiment_results.extend(
-            run_experiment(experiment, key, options=options, client=client, logger=logger)
-        )
+    results = []
+    for task in tasks:
+        results.append(client.submit(task, options=options, logger=logger.bind(task=task.name)))
 
-    experiment_results = client.gather(experiment_results)
+    results = client.gather(results)
 
     client.close()
 
-    dataframe = pd.DataFrame(map(asdict, experiment_results))
-    dataframe = dataframe.set_index("experiment")
+    dataframe = pd.DataFrame(map(asdict, results))
     timestamp = str(math.trunc(time.time()))
 
     filename = f"vbmc-experiments-{timestamp}.csv"
     logger.info(f"Saving results to {filename}")
-    dataframe.to_csv(filename)
+    dataframe.to_csv(filename, index=False)
 
 if __name__ == '__main__':
     try:
