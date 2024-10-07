@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 from jax import Array
 
-from . import VBMCModel
+from . import VBMCInferenceProblem
 
 tfd = tfp.distributions
 
@@ -16,7 +16,7 @@ def rosen(x: Array, *, a = 1., b = 100.):
     return jnp.sum(b * jnp.square(x[1:] - jnp.square(x[:-1])) + jnp.square(a - x[:-1]))
 
 @dataclass(frozen=True)
-class Rosenbrock(VBMCModel):
+class Rosenbrock(VBMCInferenceProblem):
     ndim: int = 2
     constraint: Callable[[Array], Array] | None = None
 

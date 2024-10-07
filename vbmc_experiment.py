@@ -32,7 +32,7 @@ from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilit
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 
 from harness import Timer
-from harness.vbmc.tasks import VBMCModel
+from harness.vbmc.tasks import VBMCInferenceProblem
 from harness.vbmc.tasks.rosenbrock import Rosenbrock
 from harness.vbmc.constraints import simple_constraint
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
@@ -163,11 +163,11 @@ class VBMCTrialResult:
     mmtv: float
     # endregion
 
-def get_reference_posterior(model: VBMCModel, *, options: Options, constrained = False):
+def get_reference_posterior(model: VBMCInferenceProblem, *, options: Options, constrained = False):
     return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
 
 def run_vbmc(
-    model: VBMCModel,
+    model: VBMCInferenceProblem,
     key: PRNGKeyArray,
     *,
     verbose=False,
@@ -223,7 +223,7 @@ def _suppress_noise():
 
 def run_trial(
     name: str,
-    model: VBMCModel,
+    model: VBMCInferenceProblem,
     key: PRNGKeyArray,
     *,
     feasibility_estimator: FeasibilityEstimator | None = None,
@@ -310,7 +310,7 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
 @dataclass(kw_only=True)
 class VBMCExperiment:
     name: str
-    model: VBMCModel
+    model: VBMCInferenceProblem
 
 def main():
     options = Options.from_args()

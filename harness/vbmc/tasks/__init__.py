@@ -23,7 +23,7 @@ class UnnormalizedJointDistribution(ABC):
         return self.prior.log_prob(x) + self.log_likelihood(x)
 
 
-class VBMCModel(UnnormalizedJointDistribution):
+class VBMCInferenceProblem(UnnormalizedJointDistribution):
     @property
     @abstractmethod
     def name(self) -> str:
@@ -44,5 +44,5 @@ class VBMCModel(UnnormalizedJointDistribution):
     def constraint(self):
         ...
 
-    def without_constraints(self) -> VBMCModel:
+    def without_constraints(self) -> VBMCInferenceProblem:
         return self
