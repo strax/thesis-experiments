@@ -21,6 +21,10 @@ class ELFIModelBuilder(Protocol):
     def bounds(self) -> Bounds:
         ...
 
+    @property
+    def constraint(self):
+        ...
+
     def build_model(self) -> ModelBundle:
         ...
 

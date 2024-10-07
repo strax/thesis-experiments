@@ -24,7 +24,6 @@ def constraint_2d_corner(x, y, a=5, b=10, scale=5):
 class Gauss2D:
     stochastic_failure_rate: float = 0.0
     n_obs: int = 5
-    seed: int = 0
     mu1: float = 3.0
     mu2: float = 3.0
     constraint: callable | None = None

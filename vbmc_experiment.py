@@ -30,6 +30,7 @@ from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 
+from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
@@ -42,6 +43,19 @@ POSTERIORS_PATH = Path.cwd() / "posteriors"
 
 DEFAULT_TRIALS = 20
 DEFAULT_VP_SAMPLE_COUNT = 400000
+
+def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
+    match kind:
+        case FeasibilityEstimatorKind.NONE:
+            return None
+        case FeasibilityEstimatorKind.ORACLE:
+            assert constraint is not None, ValueError(
+                "constraint cannot be None when using oracle feasibility estimation"
+            )
+            return OracleFeasibilityEstimator(constraint)
+        case FeasibilityEstimatorKind.GPC_MATERN:
+            return GPCFeasibilityEstimator()
+
 
 @dataclass
 class VBMCInferenceResult:
@@ -226,7 +240,7 @@ def run_trial(
     model: VBMCInferenceProblem,
     key: PRNGKeyArray,
     *,
-    feasibility_estimator: FeasibilityEstimator | None = None,
+    feasibility_estimator: FeasibilityEstimatorKind,
     reference_sample: NDArray,
     options: Options,
     logger: Logger
@@ -237,7 +251,11 @@ def run_trial(
         model,
         key=key,
         verbose=options.verbose,
-        vbmc_options=dict(feasibility_estimator=feasibility_estimator),
+        vbmc_options=dict(
+            feasibility_estimator=make_feasibility_estimator(
+                feasibility_estimator, model.constraint
+            )
+        ),
         logger=logger
     )
 
@@ -254,7 +272,7 @@ def run_trial(
 
     return VBMCTrialResult(
         experiment=name,
-        feasibility_estimator=feasibility_estimator.__class__.__name__ if feasibility_estimator is not None else "",
+        feasibility_estimator=feasibility_estimator,
         vp_sample_checksum=crc32(vp_samples),
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
@@ -283,10 +301,11 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
     reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
     logger.debug(f"Loaded reference posterior", checksum=crc32(reference_posterior))
 
-    # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
-    feasibility_estimators = [None]
-    if model.constraint is not None:
-        feasibility_estimators.extend([OracleFeasibilityEstimator(model.constraint), GPCFeasibilityEstimator()])
+    # If constrained, run full suite of feasibility estimators, otherwise just the base case (without one)
+    if model.constraint is None:
+        feasibility_estimators = [FeasibilityEstimatorKind.NONE]
+    else:
+        feasibility_estimators = list(FeasibilityEstimatorKind)
 
     trial_results = []
 
@@ -299,8 +318,8 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
                 experiment.name,
                 model,
                 key_trial,
-                logger=logger.bind(task=(experiment.name, i)),
-                feasibility_estimator=deepcopy(feasibility_estimator),
+                logger=logger.bind(task=(experiment.name, i, feasibility_estimator)),
+                feasibility_estimator=feasibility_estimator,
                 reference_sample=reference_posterior,
                 options=options
             )

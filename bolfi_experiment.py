@@ -3,29 +3,35 @@
 from __future__ import annotations
 
 import os
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+import jax
+
+jax.config.update("jax_enable_x64", True)
 
 import math
 import sys
-from argparse import ArgumentParser, BooleanOptionalAction
+from argparse import ArgumentParser
 from dataclasses import asdict, dataclass
-from copy import deepcopy
 from fnmatch import fnmatch
-from functools import partial
 from pathlib import Path
 from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
 
 import elfi
+import jax.numpy as jnp
 import numpy as np
 import pandas as pd
-from elfi.methods.bo.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
+from elfi.methods.bo.feasibility_estimation import (
+    OracleFeasibilityEstimator,
+)
 from elfi.methods.bo.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from elfi.methods.results import BolfiSample, Sample
-from numpy.random import SeedSequence
+from jaxtyping import PRNGKeyArray
 from numpy.typing import NDArray
 
+from harness import FeasibilityEstimatorKind
 from harness.elfi.tasks import ELFIModelBuilder
 from harness.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
 from harness.logging import get_logger, configure_logging, Logger
@@ -39,8 +45,22 @@ DEFAULT_REJECTION_SAMPLE_COUNT = 10000
 DEFAULT_BOLFI_SAMPLE_COUNT = 1000
 DEFAULT_TRIALS = 20
 
+
 def compute_sample_checksum(sample: Sample) -> int:
     return crc32(sample.samples_array)
+
+
+def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
+    match kind:
+        case FeasibilityEstimatorKind.NONE:
+            return None
+        case FeasibilityEstimatorKind.ORACLE:
+            assert constraint is not None, ValueError(
+                "constraint cannot be None when using oracle feasibility estimation"
+            )
+            return OracleFeasibilityEstimator(constraint)
+        case FeasibilityEstimatorKind.GPC_MATERN:
+            return GPCFeasibilityEstimator()
 
 
 @dataclass(kw_only=True)
@@ -48,6 +68,7 @@ class TrialResult:
     # region Identifiers
     experiment: str
     seed: int
+    feasibility_estimator: FeasibilityEstimatorKind
     # endregion
 
     # region Configuration
@@ -67,9 +88,11 @@ class TrialResult:
     inference_runtime: float
     # endregion
 
+
 @dataclass(kw_only=True)
 class BOLFIResult:
     inference_runtime: float
+    seed: int
     n_evidence: int
     n_failures: int
     n_initial_evidence: int
@@ -85,7 +108,6 @@ class ExperimentFailure(RuntimeError):
 class BOLFIExperiment:
     name: str
     sim: Any
-    feasibility_estimator_factory: Any
     bolfi_kwargs: dict[str, Any]
     obs: NDArray[np.float64]
     logger: Logger
@@ -95,19 +117,24 @@ class BOLFIExperiment:
         *,
         name: str,
         model_builder: ELFIModelBuilder,
-        feasibility_estimator: FeasibilityEstimator | None = None,
         **kwargs,
     ):
         self.name = name
         self.model_builder = model_builder
-        self.feasibility_estimator = deepcopy(feasibility_estimator)
         self.bolfi_kwargs = kwargs
 
-    def run_rejection_sampler(self, seed: SeedSequence, *, options: Options, logger: Logger) -> Sample:
-        seed = seed.generate_state(1).item()
+    def run_rejection_sampler(
+        self, key: PRNGKeyArray, *, options: Options, logger: Logger
+    ) -> Sample:
+        seed = jax.random.bits(key, dtype=jnp.uint32).item()
+
         cache_key = f"{self.name}:{seed}:{options.rejection_sample_count}"
         if options.cache and (cached_sample := OBJECT_CACHE.get(cache_key)):
-            logger.debug(f"Found cached rejection samples", seed=seed, checksum=compute_sample_checksum(cached_sample))
+            logger.debug(
+                f"Found cached rejection samples",
+                seed=seed,
+                checksum=compute_sample_checksum(cached_sample),
+            )
             return cached_sample
 
         bundle = self.model_builder.build_model()
@@ -115,17 +142,25 @@ class BOLFIExperiment:
         logger.debug(f"Running rejection sampler", seed=seed)
         timer = Timer()
         sample: Sample = sampler.sample(options.rejection_sample_count, bar=False)
-        logger.debug(f"Rejection sampling completed in {timer.elapsed}", checksum=compute_sample_checksum(sample))
+        logger.debug(
+            f"Rejection sampling completed in {timer.elapsed}",
+            checksum=compute_sample_checksum(sample),
+        )
         if options.cache:
             OBJECT_CACHE.put(cache_key, sample)
         return sample
 
     def run_bolfi(
-        self, seed: int, *, logger: Logger, options: Options
+        self,
+        key: PRNGKeyArray,
+        *,
+        logger: Logger,
+        options: Options,
+        feasibility_estimator: FeasibilityEstimatorKind,
     ) -> BOLFIResult:
-        bundle = self.model_builder.build_model()
+        seed = jax.random.bits(key, dtype=jnp.uint32).item()
 
-        feasibility_estimator = deepcopy(self.feasibility_estimator)
+        bundle = self.model_builder.build_model()
 
         bolfi = elfi.BOLFI(
             bundle.target,
@@ -135,7 +170,9 @@ class BOLFIExperiment:
             bounds=self.model_builder.bounds,
             acq_noise_var=0,
             seed=seed,
-            feasibility_estimator=feasibility_estimator,
+            feasibility_estimator=make_feasibility_estimator(
+                feasibility_estimator, self.model_builder.constraint
+            ),
             max_parallel_batches=1,
             **self.bolfi_kwargs,
         )
@@ -143,7 +180,9 @@ class BOLFIExperiment:
         timer = Timer()
         bolfi.fit(n_evidence=200, bar=False)
         inference_runtime = timer.elapsed
-        logger.debug(f"Inference completed in {inference_runtime}", failures=bolfi.n_failures)
+        logger.debug(
+            f"Inference completed in {inference_runtime}", failures=bolfi.n_failures
+        )
 
         logger.debug("Sampling from BOLFI posterior")
         try:
@@ -152,8 +191,12 @@ class BOLFIExperiment:
             logger.warning(str(err))
             sample = None
         else:
-            logger.debug(f"Sampling completed in {timer.elapsed}", checksum=compute_sample_checksum(sample))
+            logger.debug(
+                f"Sampling completed in {timer.elapsed}",
+                checksum=compute_sample_checksum(sample),
+            )
         return BOLFIResult(
+            seed=seed,
             inference_runtime=inference_runtime.total_seconds(),
             n_evidence=bolfi.n_evidence,
             n_failures=bolfi.n_failures,
@@ -163,12 +206,21 @@ class BOLFIExperiment:
         )
 
     def run_trial(
-        self, seed: int, reference_sample: Sample, *, options: Options, logger: Logger
+        self,
+        key: PRNGKeyArray,
+        reference_sample: Sample,
+        *,
+        feasibility_estimator: FeasibilityEstimatorKind,
+        options: Options,
+        logger: Logger,
     ) -> TrialResult:
         logger.info("Executing task")
 
         bolfi_result = self.run_bolfi(
-            seed, options=options, logger=logger
+            key,
+            options=options,
+            logger=logger,
+            feasibility_estimator=feasibility_estimator,
         )
 
         if bolfi_result.sample is not None:
@@ -189,6 +241,7 @@ class BOLFIExperiment:
             bolfi_sample_checksum=sample_checksum,
             bolfi_sample_count=bolfi_result.sample.n_samples,
             experiment=self.name,
+            feasibility_estimator=feasibility_estimator,
             gskl=gskl,
             mmtv=mmtv,
             inference_runtime=bolfi_result.inference_runtime,
@@ -197,25 +250,42 @@ class BOLFIExperiment:
             n_initial_evidence=bolfi_result.n_initial_evidence,
             reference_sample_checksum=compute_sample_checksum(reference_sample),
             reference_sample_count=reference_sample.n_samples,
-            seed=seed,
+            seed=bolfi_result.seed,
             update_interval=bolfi_result.update_interval,
         )
 
-    def run(self, seed: SeedSequence, *, options: Options, logger: Logger) -> Iterable[TrialResult]:
-        reference_sample = self.run_rejection_sampler(seed, options=options, logger=logger)
+    def run(
+        self, key: PRNGKeyArray, *, options: Options, logger: Logger
+    ) -> Iterable[TrialResult]:
+        reference_sample = self.run_rejection_sampler(
+            key, options=options, logger=logger
+        )
 
-        results = []
-        for i in range(options.trials):
-            seed, subseed = seed.spawn(2)
-
-            result = self.run_trial(
-                subseed.generate_state(1).item(),
-                reference_sample,
-                options=options,
-                logger=logger.bind(task=(self.name, i))
+        # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
+        feasibility_estimators = [FeasibilityEstimatorKind.NONE]
+        if self.model_builder.constraint is not None:
+            feasibility_estimators.extend(
+                [
+                    FeasibilityEstimatorKind.ORACLE,
+                    FeasibilityEstimatorKind.GPC_MATERN,
+                ]
             )
-            results.append(result)
-        return results
+
+        trial_results = []
+        for feasibility_estimator in feasibility_estimators:
+            key_experiment = key
+            for i in range(options.trials):
+                key_experiment, key_trial = jax.random.split(key_experiment)
+
+                result = self.run_trial(
+                    key_trial,
+                    reference_sample,
+                    logger=logger.bind(task=(self.name, i, feasibility_estimator)),
+                    feasibility_estimator=feasibility_estimator,
+                    options=options,
+                )
+                trial_results.append(result)
+        return trial_results
 
 
 @dataclass
@@ -276,22 +346,18 @@ class Options:
             help=f"number of trials to run (with different seed each) for each experiment (default: {DEFAULT_TRIALS})",
         )
         parser.add_argument(
-            "--no-cache",
-            action="store_true",
-            help="disable rejection sample caching"
+            "--no-cache", action="store_true", help="disable rejection sample caching"
         )
         parser.add_argument(
             "--elfi-client",
             type=str,
             metavar="CLIENT",
-            default='native',
+            default="native",
             help="ELFI client to use. Available choices: native, multiprocessing, dask (default: native)",
-            choices=['native', 'multiprocessing', 'dask']
+            choices=["native", "multiprocessing", "dask"],
         )
         parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="enable verbose output"
+            "--verbose", action="store_true", help="enable verbose output"
         )
         ns = parser.parse_args()
         return cls(**vars(ns))
@@ -310,34 +376,13 @@ def main():
     configure_logging(options.verbose)
     logger = get_logger()
 
-    experiments: List[BOLFIExperiment] = []
-    experiments.append(BOLFIExperiment(name="gauss_nd_mean/base", model_builder=Gauss2D(seed=options.seed)))
-    experiments.append(
+    experiments: List[BOLFIExperiment] = [
+        BOLFIExperiment(name="gauss2d", model_builder=Gauss2D()),
         BOLFIExperiment(
-            name="gauss_nd_mean/random_failures/p=0.2",
-            model_builder=Gauss2D(stochastic_failure_rate=0.2, seed=options.seed),
-        )
-    )
-    experiments.append(
-        BOLFIExperiment(
-            name="gauss_nd_mean/hidden_constraint",
-            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed)
-        )
-    )
-    experiments.append(
-        BOLFIExperiment(
-            name="gauss_nd_mean/hidden_constraint/oracle",
-            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
-            feasibility_estimator=OracleFeasibilityEstimator(constraint_2d_corner),
-        )
-    )
-    experiments.append(
-        BOLFIExperiment(
-            name="gauss_nd_mean/hidden_constraint/gpc",
-            model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
-            feasibility_estimator=GPCFeasibilityEstimator(),
-        )
-    )
+            name="gauss2d+constraint_2d_corner",
+            model_builder=Gauss2D(constraint=constraint_2d_corner),
+        ),
+    ]
 
     if options.filter:
         experiments = [
@@ -361,11 +406,14 @@ def main():
     if not options.cache:
         logger.debug("Rejection sample cache is disabled")
 
+    key = jax.random.key(options.seed)
     timer = Timer()
+
     experiment_results: List[TrialResult] = []
     for experiment in experiments:
-        logger.debug(f"Running experiment: {experiment.name}")
-        trial_results = experiment.run(SeedSequence(options.seed), options=options, logger=logger.bind(task=experiment.name))
+        trial_results = experiment.run(
+            key, options=options, logger=logger.bind(task=experiment.name)
+        )
         experiment_results.extend(trial_results)
 
     logger.debug(f"Total runtime: {timer.elapsed}")
