@@ -27,7 +27,6 @@ import dask.distributed as dd
 import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
 from numpy.typing import NDArray
-from pyemd import emd_samples
 from pyvbmc import VBMC, VariationalPosterior
 from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
@@ -36,7 +35,7 @@ from bench import Timer
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
 from bench.vbmc.constraints import simple_constraint
-from bench.metrics import wasserstein_distance, gskl, marginal_total_variation
+from bench.metrics import gskl, marginal_total_variation
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -150,7 +149,6 @@ class VBMCTrialResult:
     # endregion
 
     # region Metrics
-    emd: float
     gskl: float
     mmtv: float
     # endregion
@@ -243,7 +241,6 @@ def run_trial(
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
-        emd=wasserstein_distance(reference_sample, vp_samples),
         gskl=gskl(reference_sample, vp_samples),
         mmtv=marginal_total_variation(reference_sample, vp_samples).mean(),
         seed=inference_result.seed,
