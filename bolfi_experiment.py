@@ -9,6 +9,7 @@ import math
 import sys
 from argparse import ArgumentParser, BooleanOptionalAction
 from dataclasses import asdict, dataclass
+from copy import deepcopy
 from fnmatch import fnmatch
 from functools import partial
 from pathlib import Path
@@ -19,7 +20,7 @@ from zlib import crc32
 import elfi
 import numpy as np
 import pandas as pd
-from elfi.methods.bo.feasibility_estimation import OracleFeasibilityEstimator
+from elfi.methods.bo.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from elfi.methods.bo.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from elfi.methods.results import BolfiSample, Sample
 from numpy.random import SeedSequence
@@ -93,12 +94,12 @@ class BOLFIExperiment:
         *,
         name: str,
         model_builder: ELFIModelBuilder,
-        feasibility_estimator_factory=None,
+        feasibility_estimator: FeasibilityEstimator | None = None,
         **kwargs,
     ):
         self.name = name
         self.model_builder = model_builder
-        self.feasibility_estimator_factory = feasibility_estimator_factory
+        self.feasibility_estimator = deepcopy(feasibility_estimator)
         self.bolfi_kwargs = kwargs
 
     def run_rejection_sampler(self, seed: SeedSequence, *, options: Options) -> Sample:
@@ -125,10 +126,7 @@ class BOLFIExperiment:
     ) -> BOLFIResult:
         bundle = self.model_builder.build_model()
 
-        if self.feasibility_estimator_factory is not None:
-            feasibility_estimator = self.feasibility_estimator_factory()
-        else:
-            feasibility_estimator = None
+        feasibility_estimator = deepcopy(self.feasibility_estimator)
 
         bolfi = elfi.BOLFI(
             bundle.target,
@@ -317,16 +315,14 @@ def main():
         BOLFIExperiment(
             name="gauss_nd_mean/hidden_constraint/oracle",
             model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
-            feasibility_estimator_factory=partial(
-                OracleFeasibilityEstimator, constraint_2d_corner
-            ),
+            feasibility_estimator=OracleFeasibilityEstimator(constraint_2d_corner),
         )
     )
     experiments.append(
         BOLFIExperiment(
             name="gauss_nd_mean/hidden_constraint/gpc",
             model_builder=Gauss2D(constraint=constraint_2d_corner, seed=options.seed),
-            feasibility_estimator_factory=GPCFeasibilityEstimator,
+            feasibility_estimator=GPCFeasibilityEstimator(),
         )
     )
 
