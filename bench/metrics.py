@@ -15,7 +15,7 @@ def wasserstein_distance(x1, x2):
     return pyemd.emd_samples(x1, x2)
 
 
-def gskl(x1, x2):
+def gauss_symm_kl_divergence(x1, x2):
     """
     Compute the "Gaussianized" symmetrized KL divergence between two samples.
     """

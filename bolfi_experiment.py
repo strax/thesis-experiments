@@ -24,9 +24,9 @@ from elfi.methods.bo.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from elfi.methods.results import BolfiSample, Sample
 from numpy.random import SeedSequence
 from numpy.typing import NDArray
-from pyemd import emd_samples
 
 from bench import ObjectCache, Timer, dprint, iprint, wprint
+from bench.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from bench.elfi.tasks import ELFIModelBuilder
 from bench.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
 
@@ -59,7 +59,8 @@ class TrialResult:
     # endregion
 
     # region Outcomes
-    emd: float
+    gskl: float
+    mmtv: float
     inference_runtime: float
     # endregion
 
@@ -171,20 +172,24 @@ class BOLFIExperiment:
         )
 
         if bolfi_result.sample is not None:
-            emd = emd_samples(
+            gskl = gauss_symm_kl_divergence(
                 reference_sample.samples_array, bolfi_result.sample.samples_array
             )
+            mmtv = marginal_total_variation(
+                reference_sample.samples_array, bolfi_result.sample.samples_array
+            ).mean()
             sample_checksum = compute_sample_checksum(bolfi_result.sample)
             dprint(f"Sample checksum: {sample_checksum}")
-            dprint(f"EMD: {emd:.4f}")
         else:
             sample_checksum = 0
-            emd = np.nan
+            gskl = np.nan
+            mmtv = np.nan
         return TrialResult(
             bolfi_sample_checksum=sample_checksum,
             bolfi_sample_count=bolfi_result.sample.n_samples,
-            emd=emd,
             experiment=self.name,
+            gskl=gskl,
+            mmtv=mmtv,
             inference_runtime=bolfi_result.inference_runtime,
             n_evidence=bolfi_result.n_evidence,
             n_failures=bolfi_result.n_failures,

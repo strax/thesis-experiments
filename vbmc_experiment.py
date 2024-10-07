@@ -35,7 +35,7 @@ from bench import Timer
 from bench.vbmc.tasks import VBMCModel
 from bench.vbmc.tasks.rosenbrock import Rosenbrock
 from bench.vbmc.constraints import simple_constraint
-from bench.metrics import gskl, marginal_total_variation
+from bench.metrics import gauss_symm_kl_divergence, marginal_total_variation
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -241,7 +241,7 @@ def run_trial(
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
-        gskl=gskl(reference_sample, vp_samples),
+        gskl=gauss_symm_kl_divergence(reference_sample, vp_samples),
         mmtv=marginal_total_variation(reference_sample, vp_samples).mean(),
         seed=inference_result.seed,
         success=inference_result.success,
