@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Protocol
 
 import tensorflow_probability.substrates.jax as tfp
 from jax import Array

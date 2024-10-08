@@ -16,8 +16,7 @@ from copy import deepcopy
 from datetime import timedelta
 from dataclasses import dataclass, asdict
 from fnmatch import fnmatch
-from io import StringIO
-from typing import Any, Dict, Iterable, Sequence
+from typing import Any, Dict, Iterable
 from pathlib import Path
 from itertools import product
 from zlib import crc32
@@ -30,16 +29,16 @@ from jaxtyping import PRNGKeyArray
 from numpy.typing import NDArray
 from numpy.random import SeedSequence
 from pyvbmc import VBMC, VariationalPosterior
-from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
+from pyvbmc.feasibility_estimation import OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
-from harness.random import seed2int, split_seed
+from harness.random import seed2int
 from harness.timer import Timer
-from harness.vbmc.constraints import simple_constraint
+from harness.vbmc.constraints import Box
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from harness.vbmc.tasks import VBMCInferenceProblem
 from harness.vbmc.tasks.rosenbrock import Rosenbrock
@@ -334,10 +333,16 @@ def run_trial_ext(
         options=options
     )
 
-@dataclass(kw_only=True)
+@dataclass
 class VBMCExperiment:
     name: str
     model: VBMCInferenceProblem
+
+    def __init__(self, *, model: VBMCInferenceProblem, name: str | None = None):
+        if name is None:
+            name = model.name
+        self.name = name
+        self.model = model
 
 @dataclass(kw_only=True)
 class VBMCTrial:
@@ -384,7 +389,7 @@ def print_task_plan(tasks: Iterable[VBMCTrial]):
     rows = []
     for i, trial in enumerate(tasks):
         rows.append([i, trial.experiment.name, trial.feasibility_estimator, seed2int(trial.seed)])
-    print(tabulate(rows, headers=("ID", "Experiment", "Feasibility estimator", "Seed")))
+    print(tabulate(rows, headers=("ID", "Problem", "Feasibility estimator", "Seed")))
 
 def main():
     options = Options.from_args()
@@ -395,12 +400,10 @@ def main():
 
     experiments = [
         VBMCExperiment(
-            name="rosenbrock",
             model=Rosenbrock()
         ),
         VBMCExperiment(
-            name="rosenbrock+simple_constraint",
-            model=Rosenbrock().with_constraint(simple_constraint)
+            model=Rosenbrock().with_constraint(Box(None, (-0.5, None))),
         )
     ]
 

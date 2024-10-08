@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable
+from typing import override
 
 import jax.numpy as jnp
 import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 from jax import Array
+
+from harness.vbmc.constraints import Constraint
 
 from . import VBMCInferenceProblem
 
@@ -18,11 +20,14 @@ def rosen(x: Array, *, a = 1., b = 100.):
 @dataclass(frozen=True)
 class Rosenbrock(VBMCInferenceProblem):
     ndim: int = 2
-    constraint: Callable[[Array], Array] | None = None
+    constraint: Constraint | None = None
 
     @property
     def name(self):
-        return "rosenbrock"
+        out = "rosenbrock"
+        if self.constraint is not None:
+            out += "+" + self.constraint.name
+        return out
 
     @property
     def bounds(self):
@@ -38,10 +43,11 @@ class Rosenbrock(VBMCInferenceProblem):
     def prior(self):
         return tfd.MultivariateNormalDiag(0.0, jnp.array([3.0, 3.0]))
 
-    def with_constraint(self, constraint: Callable[[Array], Array]) -> Rosenbrock:
+    def with_constraint(self, constraint: Constraint) -> Rosenbrock:
         return replace(self, constraint=constraint)
 
-    def without_constraint(self) -> Rosenbrock:
+    @override
+    def without_constraints(self) -> Rosenbrock:
         return replace(self, constraint=None)
 
     def log_likelihood(self, x):
