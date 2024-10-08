@@ -59,7 +59,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
                 "constraint cannot be None when using oracle feasibility estimation"
             )
             return OracleFeasibilityEstimator(constraint)
-        case FeasibilityEstimatorKind.GPC_MATERN:
+        case FeasibilityEstimatorKind.GPC_MATERN52:
             return GPCFeasibilityEstimator()
 
 
@@ -264,13 +264,7 @@ class BOLFIExperiment:
         # If constrained, run n*3 trials: without feasibility estimator, with oracle, and with GPC
         feasibility_estimators = [FeasibilityEstimatorKind.NONE]
         if self.model_builder.constraint is not None:
-            feasibility_estimators.extend(
-                [
-                    FeasibilityEstimatorKind.ORACLE,
-                    FeasibilityEstimatorKind.GPC_MATERN,
-                ]
-            )
-
+            feasibility_estimators = list(FeasibilityEstimatorKind)
         trial_results = []
         for feasibility_estimator in feasibility_estimators:
             key_experiment = key
