@@ -334,40 +334,6 @@ def run_trial_ext(
         options=options
     )
 
-def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Options, client, logger: Logger) -> Sequence[VBMCTrialResult]:
-    logger = logger.bind(task=experiment.name)
-    model = experiment.model
-
-    reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
-    logger.debug(f"Loaded reference posterior", checksum=crc32(reference_posterior))
-
-    # If constrained, run full suite of feasibility estimators, otherwise just the base case (without one)
-    if model.constraint is None:
-        feasibility_estimators = [FeasibilityEstimatorKind.NONE]
-    else:
-        feasibility_estimators = list(FeasibilityEstimatorKind)
-
-    trial_results = []
-
-    for feasibility_estimator in feasibility_estimators:
-        key_experiment = key
-        for i in range(options.trials):
-            key_experiment, key_trial = jax.random.split(key_experiment)
-            trial_result = client.submit(
-                run_trial,
-                experiment.name,
-                model,
-                key_trial,
-                logger=logger.bind(task=(experiment.name, i, feasibility_estimator)),
-                feasibility_estimator=feasibility_estimator,
-                reference_sample=reference_posterior,
-                options=options
-            )
-            trial_results.append(trial_result)
-
-    return trial_results
-
-
 @dataclass(kw_only=True)
 class VBMCExperiment:
     name: str
