@@ -1,6 +1,6 @@
 from __future__ import absolute_import, annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import cast, Dict, Callable, Concatenate, Tuple, TypeAlias, TypedDict, Protocol, Unpack, NotRequired
 from dataclasses import dataclass
 from functools import wraps
@@ -13,9 +13,6 @@ import numpy as np
 
 Bounds: TypeAlias = Dict[str, Tuple[float, ...]]
 
-class ELFIInferenceProblem(ABC):
-    pass
-
 class ELFIModelBuilder(Protocol):
     @property
     def bounds(self) -> Bounds:
@@ -27,6 +24,11 @@ class ELFIModelBuilder(Protocol):
 
     def build_model(self) -> ModelBundle:
         ...
+
+class ELFIInferenceProblem(ELFIModelBuilder):
+    @property
+    def name(self):
+        pass
 
 @dataclass
 class ModelBundle:

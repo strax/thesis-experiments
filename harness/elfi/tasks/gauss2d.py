@@ -33,6 +33,10 @@ class Gauss2D:
         assert MU2_MIN <= self.mu2 <= MU2_MAX, ValueError("mu2")
 
     @property
+    def name(self) -> str:
+        return "gauss2d"
+
+    @property
     def cov_matrix(self) -> NDArray:
         return np.array([[0.6, 0.5], [0.5, 0.6]])
 

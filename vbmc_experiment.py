@@ -37,6 +37,7 @@ from tabulate import tabulate
 from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
+from harness.random import seed2int, split_seed
 from harness.timer import Timer
 from harness.vbmc.constraints import simple_constraint
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
@@ -371,9 +372,6 @@ def run_experiment(experiment: VBMCExperiment, key: PRNGKeyArray, *, options: Op
 class VBMCExperiment:
     name: str
     model: VBMCInferenceProblem
-
-def seed2int(seed: SeedSequence):
-    return seed.generate_state(1).item()
 
 @dataclass(kw_only=True)
 class VBMCTrial:
