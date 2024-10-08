@@ -24,6 +24,7 @@ dependencies:
     - "pytest"
     - "pytorch-minimize"
     - "structlog"
+    - "tabulate"
     - "tfp-nightly"
     - "git+https://github.com/cornellius-gp/linear_operator.git"
     - "git+https://github.com/cornellius-gp/gpytorch.git"
