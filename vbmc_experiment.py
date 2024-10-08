@@ -404,6 +404,12 @@ def main():
         ),
         VBMCExperiment(
             model=Rosenbrock().with_constraint(Box(None, (-0.5, None))),
+        ),
+        VBMCExperiment(
+            model=Rosenbrock().with_constraint(Box(None, (-1.5, None))),
+        ),
+        VBMCExperiment(
+            model=Rosenbrock().with_constraint(Box(None, (-2.5, None))),
         )
     ]
 
