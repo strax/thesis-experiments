@@ -34,7 +34,7 @@ from tabulate import tabulate
 from harness import FeasibilityEstimatorKind
 from harness.random import seed2int
 from harness.elfi.tasks import ELFIInferenceProblem, ELFIModelBuilder
-from harness.elfi.tasks.gauss2d import Gauss2D, constraint_2d_corner
+from harness.elfi.tasks.gauss2d import Gauss2D, corner1
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
@@ -368,8 +368,8 @@ def main():
     experiments: List[BOLFIExperiment] = [
         BOLFIExperiment(name="gauss2d", inference_problem=Gauss2D()),
         BOLFIExperiment(
-            name="gauss2d+constraint_2d_corner",
-            inference_problem=Gauss2D(constraint=constraint_2d_corner),
+            name="gauss2d+corner1",
+            inference_problem=Gauss2D(constraint=corner1),
         ),
     ]
 

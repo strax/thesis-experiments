@@ -14,7 +14,7 @@ from . import ModelBundle, Bounds, SimulatorFunction, with_constraint, with_stoc
 MU1_MIN, MU1_MAX = 0, 5
 MU2_MIN, MU2_MAX = 0, 5
 
-def constraint_2d_corner(x, y, a=5, b=10, scale=5):
+def corner1(x, y, a=5, b=10, scale=5):
     x = x / scale
     y = y / scale
     z = expit((x + y - 1) * (a + b * np.square(x - y)))
