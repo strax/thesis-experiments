@@ -11,14 +11,18 @@ from scipy.special import expit
 
 from . import ModelBundle, Bounds, SimulatorFunction, with_constraint, with_stochastic_failures
 
-MU1_MIN, MU1_MAX = 0, 5
-MU2_MIN, MU2_MAX = 0, 5
+MU1_MIN, MU1_MAX = 0, 8
+MU2_MIN, MU2_MAX = 0, 8
 
 def corner1(x, y, a=5, b=10, scale=5):
     x = x / scale
     y = y / scale
     z = expit((x + y - 1) * (a + b * np.square(x - y)))
     return (1 - 2 * np.minimum(z, 0.5)) <= 0.9
+
+def _mahalanobis(*simulated, observed, vi):
+    diff = (simulated[0] - observed[0]).transpose()
+    return np.sqrt(np.sum(diff * (vi @ diff), axis=0)).reshape(-1, 1)
 
 @dataclass(frozen=True)
 class Gauss2D:
@@ -38,7 +42,7 @@ class Gauss2D:
 
     @property
     def cov_matrix(self) -> NDArray:
-        return np.array([[0.6, 0.5], [0.5, 0.6]])
+        return np.array([[1., 0.5], [0.5, 1.]])
 
     @property
     def bounds(self) -> Bounds:
@@ -56,11 +60,11 @@ class Gauss2D:
     def build_model(self) -> ModelBundle:
         model = elfi.new_model(self.__class__.__name__)
 
-        mu1 = elfi.Prior("uniform", MU1_MIN, MU1_MAX - MU1_MIN, model=model)
-        mu2 = elfi.Prior("uniform", MU2_MIN, MU2_MAX - MU2_MIN, model=model)
+        mu1 = elfi.Prior("norm", MU1_MAX / 2, MU1_MAX / 4, model=model)
+        mu2 = elfi.Prior("norm", MU1_MAX / 2, MU1_MAX / 4, model=model)
 
         y = elfi.Simulator(self.simulator, mu1, mu2, model=model)
         mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]), model=model)
-        d = elfi.Discrepancy(euclidean_multidim, mean, model=model)
+        d = elfi.Discrepancy(partial(_mahalanobis, vi=np.linalg.inv(self.cov_matrix)), mean, model=model)
 
         return ModelBundle(model=model, target=d)
