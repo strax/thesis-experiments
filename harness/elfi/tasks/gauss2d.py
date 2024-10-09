@@ -5,7 +5,7 @@ from functools import partial, cached_property
 
 import elfi
 import numpy as np
-from elfi.examples.gauss import gauss_nd_mean, euclidean_multidim, ss_mean
+from elfi.examples.gauss import gauss_nd_mean, ss_mean
 from numpy.typing import ArrayLike, NDArray
 from scipy.special import expit
 
@@ -20,9 +20,9 @@ def corner1(x, y, a=5, b=10, scale=5):
     z = expit((x + y - 1) * (a + b * np.square(x - y)))
     return (1 - 2 * np.minimum(z, 0.5)) <= 0.9
 
-def _mahalanobis(*simulated, observed, vi):
-    diff = (simulated[0] - observed[0]).transpose()
-    return np.sqrt(np.sum(diff * (vi @ diff), axis=0)).reshape(-1, 1)
+def _mahalanobis_discrepancy(simulated, observed, vi):
+    w = simulated - observed
+    return np.sqrt(np.einsum('...i,ii,...i->...', w, vi, w))
 
 @dataclass(frozen=True)
 class Gauss2D:
@@ -65,6 +65,6 @@ class Gauss2D:
 
         y = elfi.Simulator(self.simulator, mu1, mu2, model=model)
         mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]), model=model)
-        d = elfi.Discrepancy(partial(_mahalanobis, vi=np.linalg.inv(self.cov_matrix)), mean, model=model)
+        d = elfi.Discrepancy(partial(_mahalanobis_discrepancy, vi=np.linalg.inv(self.cov_matrix)), mean, model=model)
 
         return ModelBundle(model=model, target=d)
