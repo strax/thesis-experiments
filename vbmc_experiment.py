@@ -63,12 +63,6 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
 
 
 @dataclass
-class VBMCInferenceResult:
-    elbo: float
-    elbo_sd: float
-
-
-@dataclass
 class Options:
     seed: int
     trials: int
