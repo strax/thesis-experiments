@@ -35,7 +35,10 @@ def main():
         with tarfile.open(filename) as archive:
             for member in filter(is_stdout_file, archive):
                 file = archive.extractfile(member)
-                rows.append(pd.read_csv(file))
+                try:
+                    rows.append(pd.read_csv(file))
+                except pd.errors.EmptyDataError as err:
+                    abort(f"error: {file.name}: {str(err)}")
     except FileNotFoundError as err:
         abort(f"error: {err.strerror}: {err.filename}")
     except tarfile.ReadError:
