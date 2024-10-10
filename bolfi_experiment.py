@@ -6,6 +6,7 @@ import os
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
+import json
 import math
 import sys
 from argparse import ArgumentParser
@@ -398,7 +399,7 @@ def main():
             logger.error("invalid task id")
             return
         result = tasks[task_id](options=options, logger=logger)
-        pd.DataFrame([asdict(result)]).to_csv(sys.stdout, index=False)
+        print(json.dumps(asdict(result)))
         return
 
     if options.dry_run:

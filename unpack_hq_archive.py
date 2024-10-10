@@ -23,12 +23,14 @@ def abort(message):
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("filename", type=Path)
+    parser.add_argument("--input-format", choices=['csv', 'json'], default='json')
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     filename: Path = args.filename
+    input_format = args.input_format
 
     try:
         rows = []
@@ -36,7 +38,10 @@ def main():
             for member in filter(is_stdout_file, archive):
                 file = archive.extractfile(member)
                 try:
-                    rows.append(pd.read_csv(file))
+                    if input_format == 'csv':
+                        rows.append(pd.read_csv(file))
+                    else:
+                        rows.append(pd.read_json(file))
                 except pd.errors.EmptyDataError as err:
                     abort(f"error: {file.name}: {str(err)}")
     except FileNotFoundError as err:

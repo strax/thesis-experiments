@@ -7,6 +7,7 @@ os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import jax
 jax.config.update('jax_enable_x64', True)
 
+import json
 import math
 import logging
 import sys
@@ -431,7 +432,7 @@ def main():
             logger.error("invalid task id")
             return
         result = tasks[task_id](options=options, logger=logger)
-        pd.DataFrame([asdict(result)]).to_csv(sys.stdout, index=False)
+        print(json.dumps(asdict(result)))
         return
 
     cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
