@@ -33,7 +33,7 @@ from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
 from harness.random import seed2int
-from harness.elfi.tasks import ELFIInferenceProblem, ELFIModelBuilder
+from harness.elfi.tasks import ELFIInferenceProblem, ELFIModelBuilder, SupportsBuildTargetModel
 from harness.elfi.tasks.gauss2d import Gauss2D, corner1
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
@@ -119,6 +119,12 @@ def run_bolfi(
 
     bundle = model_builder.build_model()
 
+    if isinstance(model_builder, SupportsBuildTargetModel):
+        logger.debug("Model builder overrides surrogate initialization")
+        target_model = model_builder.build_target_model(bundle.model)
+    else:
+        target_model = None
+
     bolfi = elfi.BOLFI(
         bundle.target,
         batch_size=1,
@@ -127,6 +133,7 @@ def run_bolfi(
         bounds=model_builder.bounds,
         acq_noise_var=0,
         seed=seed,
+        target_model=target_model,
         feasibility_estimator=make_feasibility_estimator(
             feasibility_estimator, model_builder.constraint
         ),
