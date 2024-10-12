@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 from jax import Array
 
-from harness.vbmc.constraints import Constraint
+from harness.vbmc.constraints import Constraint, Box
 
 from . import VBMCInferenceProblem
 
@@ -56,3 +56,6 @@ class Rosenbrock(VBMCInferenceProblem):
             return jnp.where(self.constraint(x), p, jnp.nan)
         return p
 
+ROSENBROCK_HS1 = Rosenbrock().with_constraint(Box(None, (-0.5, None)))
+ROSENBROCK_HS2 = Rosenbrock().with_constraint(Box(None, (-1.5, None)))
+ROSENBROCK_HS3 = Rosenbrock().with_constraint(Box(None, (-2.5, None)))
