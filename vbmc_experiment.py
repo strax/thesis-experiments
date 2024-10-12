@@ -35,6 +35,7 @@ from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
+from harness.constraints import sigmoid_sinusoid_th
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.random import seed2int
@@ -382,8 +383,8 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
 def print_task_plan(tasks: Iterable[VBMCTrial]):
     rows = []
     for i, trial in enumerate(tasks):
-        rows.append([i, trial.experiment.name, trial.feasibility_estimator, seed2int(trial.seed)])
-    print(tabulate(rows, headers=("ID", "Problem", "Feasibility estimator", "Seed")))
+        rows.append([i, trial.experiment.name, trial.experiment.model.constraint, trial.feasibility_estimator, seed2int(trial.seed)])
+    print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Seed")))
 
 def main():
     options = Options.from_args()
