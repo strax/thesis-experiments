@@ -6,6 +6,8 @@ import tensorflow_probability.substrates.jax as tfp
 from jax import Array
 from jax.typing import ArrayLike
 
+from harness.constraints import Constraint
+
 tfd = tfp.distributions
 
 class UnnormalizedJointDistribution(ABC):
@@ -40,7 +42,7 @@ class VBMCInferenceProblem(UnnormalizedJointDistribution):
 
     @property
     @abstractmethod
-    def constraint(self):
+    def constraint(self) -> Constraint | None:
         ...
 
     def without_constraints(self) -> VBMCInferenceProblem:
