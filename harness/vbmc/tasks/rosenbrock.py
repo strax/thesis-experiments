@@ -56,3 +56,5 @@ class Rosenbrock(VBMCInferenceProblem):
 ROSENBROCK_HS1 = Rosenbrock().with_constraint(Box(None, (-0.5, None)))
 ROSENBROCK_HS2 = Rosenbrock().with_constraint(Box(None, (-1.5, None)))
 ROSENBROCK_HS3 = Rosenbrock().with_constraint(Box(None, (-2.5, None)))
+
+__all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3"]
