@@ -42,6 +42,8 @@ def main():
                         rows.append(pd.read_csv(file))
                     else:
                         rows.append(pd.read_json(file))
+                except ValueError as err:
+                    abort(f"error: {file.name}: {str(err)}")
                 except pd.errors.EmptyDataError as err:
                     abort(f"error: {file.name}: {str(err)}")
     except FileNotFoundError as err:
