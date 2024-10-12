@@ -42,7 +42,7 @@ from harness.timer import Timer
 from harness.vbmc.constraints import Box
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from harness.vbmc.tasks import VBMCInferenceProblem
-from harness.vbmc.tasks.rosenbrock import Rosenbrock
+from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -398,13 +398,16 @@ def main():
             model=Rosenbrock()
         ),
         VBMCExperiment(
-            model=Rosenbrock().with_constraint(Box(None, (-0.5, None))),
+            name="rosenbrock+hs1",
+            model=ROSENBROCK_HS1,
         ),
         VBMCExperiment(
-            model=Rosenbrock().with_constraint(Box(None, (-1.5, None))),
+            name="rosenbrock+hs2",
+            model=ROSENBROCK_HS2,
         ),
         VBMCExperiment(
-            model=Rosenbrock().with_constraint(Box(None, (-2.5, None))),
+            name="rosenbrock+hs3",
+            model=ROSENBROCK_HS3,
         )
     ]
 
