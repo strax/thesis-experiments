@@ -32,8 +32,7 @@ class BoxConstraint:
     def __call__(self, theta):
         return jnp.all((self.a <= theta) & (theta <= self.b), axis=-1)
 
-    @property
-    def name(self):
+    def __str__(self):
         formatted_constraints = []
         for i, (aa, bb) in enumerate(zip(self.a, self.b)):
             if isfinite(aa) and isfinite(bb):
@@ -44,6 +43,10 @@ class BoxConstraint:
                 formatted_constraints.append(f"{aa} <= x[{i}]")
             elif isfinite(bb):
                 formatted_constraints.append(f"x[{i}] <= {bb}")
-        return f"{self.__class__.__name__}({', '.join(formatted_constraints)})"
+        return ' ∧ '.join(formatted_constraints)
+
+    @property
+    def name(self):
+        return self.__class__.__name__
 
 __all__ = ["BoxConstraint"]
