@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 
 from harness.test_functions import rosen
-from harness.vbmc.constraints import Constraint, Box
+from harness.constraints import Constraint, Box
 
 from . import VBMCInferenceProblem
 

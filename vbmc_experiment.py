@@ -39,7 +39,6 @@ from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.random import seed2int
 from harness.timer import Timer
-from harness.vbmc.constraints import Box
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from harness.vbmc.tasks import VBMCInferenceProblem
 from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3
