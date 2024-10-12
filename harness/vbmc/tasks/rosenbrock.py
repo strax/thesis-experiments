@@ -6,16 +6,13 @@ from typing import override
 import jax.numpy as jnp
 import numpy as np
 import tensorflow_probability.substrates.jax as tfp
-from jax import Array
 
+from harness.test_functions import rosen
 from harness.vbmc.constraints import Constraint, Box
 
 from . import VBMCInferenceProblem
 
 tfd = tfp.distributions
-
-def rosen(x: Array, *, a = 1., b = 100.):
-    return jnp.sum(b * jnp.square(x[1:] - jnp.square(x[:-1])) + jnp.square(a - x[:-1]))
 
 @dataclass(frozen=True)
 class Rosenbrock(VBMCInferenceProblem):
