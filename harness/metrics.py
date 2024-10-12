@@ -1,14 +1,9 @@
 import chex
-import jax.numpy as jnp
 import numpy as np
 import pyemd
-import tensorflow_probability.substrates.jax as tfp
 from pyvbmc.stats import kl_div_mvn, kde_1d
 from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
-
-tfd = tfp.distributions
-
 
 def wasserstein_distance(x1, x2):
     # FIXME: Check that multidimensional samples are handled correctly
