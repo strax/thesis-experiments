@@ -81,3 +81,5 @@ def marginal_total_variation(xx1, xx2):
             )
 
     return mtv
+
+__all__ = ["wasserstein_distance", "gauss_symm_kl_divergence", "marginal_total_variation"]
