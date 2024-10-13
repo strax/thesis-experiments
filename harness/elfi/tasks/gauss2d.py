@@ -11,7 +11,9 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from numpy.typing import ArrayLike, NDArray
 from scipy.special import expit
 
-from . import ModelBundle, Bounds, SimulatorFunction, with_constraint, with_stochastic_failures
+from harness.constraints import Constraint
+
+from . import ModelBundle, Bounds, SimulatorFunction, with_constraint
 
 MU1_MIN, MU1_MAX = 0, 8
 MU2_MIN, MU2_MAX = 0, 8
@@ -28,11 +30,10 @@ def _mahalanobis_discrepancy(simulated, observed, vi):
 
 @dataclass(frozen=True)
 class Gauss2D:
-    stochastic_failure_rate: float = 0.0
     n_obs: int = 5
     mu1: float = 3.0
     mu2: float = 3.0
-    constraint: callable | None = None
+    constraint: Constraint | None = None
 
     def __post_init__(self):
         assert MU1_MIN <= self.mu1 <= MU1_MAX, ValueError("mu1")
@@ -53,8 +54,6 @@ class Gauss2D:
     @cached_property
     def simulator(self) -> SimulatorFunction[ArrayLike, ArrayLike]:
         sim = partial(gauss_nd_mean, cov_matrix=self.cov_matrix, n_obs=self.n_obs)
-        if self.stochastic_failure_rate > 0:
-            sim = with_stochastic_failures(sim, p=self.stochastic_failure_rate)
         if self.constraint is not None:
             sim = with_constraint(sim, self.constraint)
         return sim

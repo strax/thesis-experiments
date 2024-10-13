@@ -76,18 +76,3 @@ def with_constraint[
         return out
 
     return wrapper
-
-
-def with_stochastic_failures[
-    *T
-](inner: SimulatorFunction[*T], *, p: float) -> SimulatorFunction[*T]:
-    @wraps(inner)
-    def wrapped(*params: *T, batch_size=1, random_state: RandomState):
-        assert isinstance(random_state, RandomState)
-
-        out = inner(*params, batch_size=batch_size, random_state=random_state)
-        failed = random_state.random(batch_size) <= p
-        out[failed] = np.nan
-        return out
-
-    return wrapped
