@@ -41,7 +41,7 @@ def main():
                     if input_format == 'csv':
                         rows.append(pd.read_csv(file))
                     else:
-                        rows.append(pd.read_json(file))
+                        rows.append(pd.read_json(file, typ='series').to_frame().transpose())
                 except ValueError as err:
                     abort(f"error: {file.name}: {str(err)}")
                 except pd.errors.EmptyDataError as err:
