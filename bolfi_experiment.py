@@ -15,7 +15,6 @@ from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 from itertools import product
-from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
 
@@ -32,7 +31,7 @@ from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
 from harness.random import seed2int
-from harness.elfi.tasks import ELFIInferenceProblem, ELFIModelBuilder, SupportsBuildTargetModel
+from harness.elfi.tasks import ELFIInferenceProblem, SupportsBuildTargetModel
 from harness.elfi.tasks.gauss2d import Gauss2D, corner1
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation

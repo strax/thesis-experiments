@@ -11,7 +11,6 @@ import json
 import math
 import logging
 import sys
-import time
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import timedelta
@@ -33,7 +32,6 @@ from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
-from harness.constraints import sigmoid_sinusoid_th
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.random import seed2int
