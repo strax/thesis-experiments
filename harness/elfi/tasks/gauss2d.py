@@ -13,7 +13,7 @@ from scipy.special import expit
 
 from harness.constraints import Constraint
 
-from . import ModelBundle, Bounds, ELFIInferenceProblem, SimulatorFunction, with_constraint
+from . import ModelAndDiscrepancy, Bounds, ELFIInferenceProblem, SimulatorFunction, with_constraint
 
 MU1_MIN, MU1_MAX = 0, 8
 MU2_MIN, MU2_MAX = 0, 8
@@ -77,7 +77,7 @@ class Gauss2D(ELFIInferenceProblem):
         )
 
 
-    def build_model(self) -> ModelBundle:
+    def build_model(self) -> ModelAndDiscrepancy:
         model = elfi.new_model(self.__class__.__name__)
 
         mu1 = elfi.Prior("norm", MU1_MAX / 2, MU1_MAX / 4, model=model)
@@ -85,6 +85,6 @@ class Gauss2D(ELFIInferenceProblem):
 
         y = elfi.Simulator(self.simulator, mu1, mu2, model=model)
         mean = elfi.Summary(ss_mean, y, observed=np.array([self.mu1, self.mu2]), model=model)
-        d = elfi.Discrepancy(partial(_mahalanobis_discrepancy, vi=np.linalg.inv(self.cov_matrix)), mean, model=model)
+        discrepancy = elfi.Discrepancy(partial(_mahalanobis_discrepancy, vi=np.linalg.inv(self.cov_matrix)), mean, model=model)
 
-        return ModelBundle(model=model, target=d)
+        return ModelAndDiscrepancy(model, discrepancy)

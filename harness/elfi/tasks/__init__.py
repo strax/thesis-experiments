@@ -1,29 +1,26 @@
 from __future__ import absolute_import, annotations
 
+from functools import wraps
 from typing import (
-    Dict,
     Callable,
+    Dict,
+    NamedTuple,
+    Protocol,
     Tuple,
     TypeAlias,
-    TypedDict,
-    Protocol,
-    NotRequired,
     runtime_checkable,
 )
-from dataclasses import dataclass
-from functools import wraps
-from numpy.random import RandomState
-from numpy.typing import NDArray
-
-from elfi import ElfiModel, NodeReference, GPyRegression
 
 import numpy as np
+from elfi import Discrepancy, ElfiModel, GPyRegression
+from numpy.random import RandomState
+from numpy.typing import NDArray
 
 Bounds: TypeAlias = Dict[str, Tuple[float, ...]]
 
 
 class ELFIModelBuilder(Protocol):
-    def build_model(self) -> ModelBundle: ...
+    def build_model(self) -> ModelAndDiscrepancy: ...
 
 
 class ELFIInferenceProblem(ELFIModelBuilder):
@@ -37,17 +34,15 @@ class ELFIInferenceProblem(ELFIModelBuilder):
     def constraint(self): ...
 
 
-
 @runtime_checkable
 class SupportsBuildTargetModel(Protocol):
-    def build_target_model(self, model: ElfiModel) -> GPyRegression:
-        ...
+    def build_target_model(self, model: ElfiModel) -> GPyRegression: ...
 
 
-@dataclass
-class ModelBundle:
+class ModelAndDiscrepancy(NamedTuple):
     model: ElfiModel
-    target: NodeReference
+    discrepancy: Discrepancy
+
 
 class SimulatorFunction[*T](Protocol):
     def __call__(

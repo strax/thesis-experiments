@@ -118,16 +118,16 @@ def run_bolfi(
 ) -> BOLFIResult:
     seed = seed2int(seed)
 
-    bundle = inference_problem.build_model()
+    model, discrepancy = inference_problem.build_model()
 
     if isinstance(inference_problem, SupportsBuildTargetModel):
         logger.debug("Model builder overrides surrogate initialization")
-        target_model = inference_problem.build_target_model(bundle.model)
+        target_model = inference_problem.build_target_model(model)
     else:
         target_model = None
 
     bolfi = elfi.BOLFI(
-        bundle.target,
+        discrepancy,
         batch_size=1,
         initial_evidence=10,
         update_interval=10,
