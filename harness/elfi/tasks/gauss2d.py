@@ -18,7 +18,7 @@ from . import ModelAndDiscrepancy, Bounds, ELFIInferenceProblem, SimulatorFuncti
 MU1_MIN, MU1_MAX = 0, 8
 MU2_MIN, MU2_MAX = 0, 8
 
-def corner1(x, y, a=5, b=10, scale=5):
+def corner1(x, y, a=5, b=10, scale=8):
     x = x / scale
     y = y / scale
     z = expit((x + y - 1) * (a + b * np.square(x - y)))
