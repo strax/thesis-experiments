@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import dask.distributed as dd
 import jax.numpy as jnp
-from jaxtyping import PRNGKeyArray
+from jaxtyping import Array
 from numpy.typing import NDArray
 from numpy.random import SeedSequence
 from pyvbmc import VBMC, VariationalPosterior
@@ -194,7 +194,7 @@ def get_reference_posterior(model: VBMCInferenceProblem, *, options: Options, co
 
 def run_vbmc(
     model: VBMCInferenceProblem,
-    key: PRNGKeyArray,
+    key: Array,
     *,
     verbose=False,
     vbmc_options: VBMCOptions = dict(),
@@ -250,7 +250,7 @@ def _suppress_noise():
 def run_trial(
     name: str,
     model: VBMCInferenceProblem,
-    key: PRNGKeyArray,
+    key: Array,
     *,
     feasibility_estimator: FeasibilityEstimatorKind,
     reference_sample: NDArray,
