@@ -6,6 +6,7 @@ import os
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
+import logging
 import json
 import math
 import sys
@@ -151,7 +152,7 @@ def run_bolfi(
 
     logger.debug("Sampling from BOLFI posterior")
     try:
-        sample = bolfi.sample(options.bolfi_sample_count, verbose=options.verbose)
+        sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
     except ValueError as err:
         logger.warning(str(err))
         sample = None
@@ -368,6 +369,7 @@ def print_task_plan(tasks: Iterable[BOLFITrial]):
 def main():
     options = Options.from_args()
 
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     configure_logging(options.verbose)
     logger = get_logger()
 
