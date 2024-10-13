@@ -8,7 +8,6 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import logging
 import json
-import math
 import sys
 from argparse import ArgumentParser
 from copy import deepcopy
@@ -22,7 +21,6 @@ from zlib import crc32
 
 import elfi
 import numpy as np
-import pandas as pd
 from elfi.methods.bo.feasibility_estimation import (
     OracleFeasibilityEstimator,
 )
@@ -415,12 +413,7 @@ def main():
     for task in tasks:
         results.append(task(options=options, logger=logger.bind(task=task.key)))
 
-    dataframe = pd.DataFrame(map(asdict, results))
-    timestamp = str(math.trunc(time()))
-
-    filename = f"bolfi-experiments-{timestamp}.csv"
-    logger.info(f"Saving results to {filename}")
-    dataframe.to_csv(filename, index=False)
+    print(json.dumps([asdict(result) for result in results]))
 
 
 if __name__ == "__main__":

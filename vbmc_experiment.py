@@ -23,7 +23,6 @@ from itertools import product
 from zlib import crc32
 
 import numpy as np
-import pandas as pd
 import jax.numpy as jnp
 from jaxtyping import Array
 from numpy.typing import NDArray
@@ -431,12 +430,7 @@ def main():
     for task in tasks:
         results.append(task(options=options, logger=logger.bind(task=task.name)))
 
-    dataframe = pd.DataFrame(map(asdict, results))
-    timestamp = str(math.trunc(time.time()))
-
-    filename = f"vbmc-experiments-{timestamp}.csv"
-    logger.info(f"Saving results to {filename}")
-    dataframe.to_csv(filename, index=False)
+    print([json.dumps(asdict(result)) for result in results])
 
 if __name__ == '__main__':
     try:
