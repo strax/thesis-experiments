@@ -189,6 +189,7 @@ def run_trial(
     )
 
     if bolfi_result.sample is not None:
+        bolfi_sample_count = bolfi_result.sample.n_samples
         gskl = gauss_symm_kl_divergence(
             reference_sample, bolfi_result.sample.samples_array
         )
@@ -197,6 +198,7 @@ def run_trial(
         ).mean()
         sample_checksum = compute_sample_checksum(bolfi_result.sample)
     else:
+        bolfi_sample_count = 0
         sample_checksum = 0
         gskl = np.nan
         mmtv = np.nan
@@ -204,7 +206,7 @@ def run_trial(
     logger.info("Task completed")
     return TrialResult(
         bolfi_sample_checksum=sample_checksum,
-        bolfi_sample_count=bolfi_result.sample.n_samples,
+        bolfi_sample_count=bolfi_sample_count,
         experiment=name,
         feasibility_estimator=feasibility_estimator,
         gskl=gskl,
