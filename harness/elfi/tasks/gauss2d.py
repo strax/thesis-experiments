@@ -13,7 +13,7 @@ from scipy.special import expit
 
 from harness.constraints import Constraint
 
-from . import ModelBundle, Bounds, SimulatorFunction, with_constraint
+from . import ModelBundle, Bounds, ELFIInferenceProblem, SimulatorFunction, with_constraint
 
 MU1_MIN, MU1_MAX = 0, 8
 MU2_MIN, MU2_MAX = 0, 8
@@ -29,7 +29,7 @@ def _mahalanobis_discrepancy(simulated, observed, vi):
     return np.sqrt(np.einsum('...i,ii,...i->...', w, vi, w))
 
 @dataclass(frozen=True)
-class Gauss2D:
+class Gauss2D(ELFIInferenceProblem):
     n_obs: int = 5
     mu1: float = 3.0
     mu2: float = 3.0

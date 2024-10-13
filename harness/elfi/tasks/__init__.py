@@ -23,19 +23,20 @@ Bounds: TypeAlias = Dict[str, Tuple[float, ...]]
 
 
 class ELFIModelBuilder(Protocol):
+    def build_model(self) -> ModelBundle: ...
+
+
+class ELFIInferenceProblem(ELFIModelBuilder):
+    @property
+    def name(self): ...
+
     @property
     def bounds(self) -> Bounds: ...
 
     @property
     def constraint(self): ...
 
-    def build_model(self) -> ModelBundle: ...
 
-
-class ELFIInferenceProblem(ELFIModelBuilder):
-    @property
-    def name(self):
-        pass
 
 @runtime_checkable
 class SupportsBuildTargetModel(Protocol):

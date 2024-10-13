@@ -109,7 +109,7 @@ class ExperimentFailure(RuntimeError):
 
 def run_bolfi(
     *,
-    model_builder: ELFIModelBuilder,
+    inference_problem: ELFIInferenceProblem,
     seed: SeedSequence,
     logger: Logger,
     options: Options,
@@ -118,11 +118,11 @@ def run_bolfi(
 ) -> BOLFIResult:
     seed = seed2int(seed)
 
-    bundle = model_builder.build_model()
+    bundle = inference_problem.build_model()
 
-    if isinstance(model_builder, SupportsBuildTargetModel):
+    if isinstance(inference_problem, SupportsBuildTargetModel):
         logger.debug("Model builder overrides surrogate initialization")
-        target_model = model_builder.build_target_model(bundle.model)
+        target_model = inference_problem.build_target_model(bundle.model)
     else:
         target_model = None
 
@@ -131,12 +131,12 @@ def run_bolfi(
         batch_size=1,
         initial_evidence=10,
         update_interval=10,
-        bounds=model_builder.bounds,
+        bounds=inference_problem.bounds,
         acq_noise_var=0,
         seed=seed,
         target_model=target_model,
         feasibility_estimator=make_feasibility_estimator(
-            feasibility_estimator, model_builder.constraint
+            feasibility_estimator, inference_problem.constraint
         ),
         max_parallel_batches=1,
         **bolfi_kwargs,
@@ -172,7 +172,7 @@ def run_bolfi(
 
 def run_trial(
     name: str,
-    problem: ELFIInferenceProblem,
+    inference_problem: ELFIInferenceProblem,
     seed: SeedSequence,
     *,
     feasibility_estimator: FeasibilityEstimatorKind,
@@ -181,10 +181,10 @@ def run_trial(
 ):
     logger.info("Executing task")
 
-    reference_sample = get_reference_posterior(problem.name, options=options)
+    reference_sample = get_reference_posterior(inference_problem.name, options=options)
 
     bolfi_result = run_bolfi(
-        model_builder=problem,
+        inference_problem=inference_problem,
         seed=seed,
         options=options,
         logger=logger,
@@ -236,7 +236,7 @@ class BOLFITrial:
         return f"{self.experiment.name}/{self.index}/{self.feasibility_estimator}"
 
     @property
-    def model_builder(self) -> ELFIModelBuilder:
+    def inference_problem(self) -> ELFIInferenceProblem:
         return self.experiment.inference_problem
 
     @property
@@ -246,7 +246,7 @@ class BOLFITrial:
     def __call__(self, *, options: Options, logger: Logger):
         return run_trial(
             self.experiment.name,
-            self.model_builder,
+            self.inference_problem,
             self.seed,
             feasibility_estimator=self.feasibility_estimator,
             options=options,
