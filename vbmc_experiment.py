@@ -189,6 +189,9 @@ class VBMCTrialResult:
     mmtv: float
     # endregion
 
+def redirect_logging_to_stderr():
+    logging.basicConfig(stream=sys.stderr, format="%(message)s")
+
 def get_reference_posterior(model: VBMCInferenceProblem, *, options: Options, constrained = False):
     return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
 
@@ -196,15 +199,12 @@ def run_vbmc(
     model: VBMCInferenceProblem,
     key: Array,
     *,
-    verbose=False,
     vbmc_options: VBMCOptions = dict(),
     logger: Logger
 ):
     seed = jax.random.bits(key, dtype=jnp.uint32).item()
 
-    vbmc_options.update(display='off')
-    if not verbose:
-        _suppress_noise()
+    redirect_logging_to_stderr()
 
     logger.debug(f"Begin VBMC inference", seed=seed)
 
@@ -244,9 +244,6 @@ def run_vbmc(
         elbo_sd=results['elbo_sd']
     )
 
-def _suppress_noise():
-    logging.disable()
-
 def run_trial(
     name: str,
     model: VBMCInferenceProblem,
@@ -262,7 +259,6 @@ def run_trial(
     inference_result = run_vbmc(
         model,
         key=key,
-        verbose=options.verbose,
         vbmc_options=dict(
             feasibility_estimator=make_feasibility_estimator(
                 feasibility_estimator, model.constraint
