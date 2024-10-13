@@ -20,7 +20,6 @@ from time import time
 from typing import Any, Iterable, List
 from zlib import crc32
 
-import dask.distributed as dd
 import elfi
 import numpy as np
 import pandas as pd
@@ -412,15 +411,9 @@ def main():
     logger.debug(f"Seed: {options.seed}")
     logger.debug(f"Trials: {options.trials}")
 
-    cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
-    client = cluster.get_client()
-
     results = []
     for task in tasks:
-        results.append(client.submit(task, options=options, logger=logger.bind(task=task.key)))
-    results = client.gather(results)
-
-    client.close()
+        results.append(task(options=options, logger=logger.bind(task=task.key)))
 
     dataframe = pd.DataFrame(map(asdict, results))
     timestamp = str(math.trunc(time()))

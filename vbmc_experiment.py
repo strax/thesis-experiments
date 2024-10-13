@@ -24,7 +24,6 @@ from zlib import crc32
 
 import numpy as np
 import pandas as pd
-import dask.distributed as dd
 import jax.numpy as jnp
 from jaxtyping import Array
 from numpy.typing import NDArray
@@ -428,16 +427,9 @@ def main():
         print(json.dumps(asdict(result)))
         return
 
-    cluster = dd.LocalCluster(n_workers=6, threads_per_worker=1)
-    client = cluster.get_client()
-
     results = []
     for task in tasks:
-        results.append(client.submit(task, options=options, logger=logger.bind(task=task.name)))
-
-    results = client.gather(results)
-
-    client.close()
+        results.append(task(options=options, logger=logger.bind(task=task.name)))
 
     dataframe = pd.DataFrame(map(asdict, results))
     timestamp = str(math.trunc(time.time()))
