@@ -49,18 +49,12 @@ class ModelBundle:
     model: ElfiModel
     target: NodeReference
 
-
-class SimulatorContext(TypedDict):
-    batch_size: NotRequired[int | None]
-    random_state: NotRequired[RandomState | None]
-
-
 class SimulatorFunction[*T](Protocol):
     def __call__(
         self,
         *args: *T,
-        batch_size: int | None = ...,
-        random_state: RandomState | None = ...,
+        batch_size: int,
+        random_state: RandomState,
     ) -> NDArray: ...
 
 
