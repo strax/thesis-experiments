@@ -28,7 +28,7 @@ def corner1_stoch(theta, a=5, b=10, scale=5):
 
 @constraint()
 def corner1(theta, a=5, b=10, scale=5):
-    corner1_stoch(theta, a=a, b=b, scale=scale) >= 0.1
+    return corner1_stoch(theta, a=a, b=b, scale=scale) >= 0.1
 
 
 __all__ = [
