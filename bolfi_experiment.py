@@ -39,6 +39,7 @@ from harness.elfi.tasks.gauss2d import Gauss2D
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
+from harness.utils import maybe
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -363,8 +364,14 @@ def generate_trials(experiments: Iterable[BOLFIExperiment], seed: SeedSequence, 
 def print_task_plan(tasks: Iterable[BOLFITrial]):
     rows = []
     for i, trial in enumerate(tasks):
-        rows.append([i, trial.experiment.name, trial.feasibility_estimator, seed2int(trial.seed)])
-    print(tabulate(rows, headers=("ID", "Experiment", "Feasibility estimator", "Seed")))
+        rows.append([
+            i,
+            trial.experiment.name,
+            maybe(str, trial.experiment.inference_problem.constraint, ""),
+            trial.feasibility_estimator,
+            seed2int(trial.seed)
+        ])
+    print(tabulate(rows, headers=("ID", "Experiment", "Constraint", "Feasibility estimator", "Seed")))
 
 
 def main():
