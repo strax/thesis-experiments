@@ -23,8 +23,8 @@ class FunctionConstraint:
         self.name = name
 
     @override
-    def __call__(self, theta):
-        return jnp.float_(self.func(theta))
+    def __call__(self, theta, **kwargs):
+        return jnp.float_(self.func(theta, **kwargs))
 
     def __str__(self):
         return self.name

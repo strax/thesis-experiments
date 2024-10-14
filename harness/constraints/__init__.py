@@ -19,12 +19,16 @@ def cubicline(theta):
 
 
 @constraint()
-def corner1(theta, a=5, b=10, scale=8):
+def corner1_stochastic(theta, a=5, b=10, scale=8):
     x, y = jnp.unstack(theta, axis=-1)
     x = x / scale
     y = y / scale
     z = sigmoid((x + y - 1) * (a + b * jnp.square(x - y)))
-    return (1 - 2 * jnp.minimum(z, 0.5)) <= 0.9
+    return 2 * jnp.minimum(z, 0.5)
+
+@constraint()
+def corner1(theta, a=5, b=10, scale=8):
+    corner1_stochastic(theta, a=a, b=b, scale=scale) >= 0.1
 
 
 __all__ = [
