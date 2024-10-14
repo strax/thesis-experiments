@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import jax
+jax.config.update('jax_platforms', 'cpu')
 jax.config.update('jax_enable_x64', True)
 
 import logging
