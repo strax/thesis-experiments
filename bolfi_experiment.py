@@ -32,7 +32,7 @@ from numpy.random import SeedSequence
 from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
-from harness.constraints import corner1
+from harness.constraints import corner1, corner1_stoch
 from harness.random import seed2int
 from harness.elfi.tasks import ELFIInferenceProblem, SupportsBuildTargetModel
 from harness.elfi.tasks.gauss2d import Gauss2D
@@ -266,11 +266,16 @@ class BOLFIExperiment:
 
     def __init__(
         self,
-        *,
-        name: str,
         inference_problem: ELFIInferenceProblem,
+        /,
+        *,
+        name: str | None = None,
         **kwargs,
     ):
+        if name is None:
+            name = inference_problem.name
+            if inference_problem.constraint is not None:
+                name += "+" + str(inference_problem.constraint)
         self.name = name
         self.inference_problem = inference_problem
         self.bolfi_kwargs = kwargs
@@ -384,11 +389,9 @@ def main():
     seed = SeedSequence(options.seed)
 
     experiments: List[BOLFIExperiment] = [
-        BOLFIExperiment(name="gauss2d", inference_problem=Gauss2D()),
-        BOLFIExperiment(
-            name="gauss2d+corner1",
-            inference_problem=Gauss2D(constraint=corner1),
-        ),
+        BOLFIExperiment(Gauss2D()),
+        BOLFIExperiment(Gauss2D(constraint=corner1)),
+        BOLFIExperiment(Gauss2D(constraint=corner1_stoch))
     ]
 
     tasks = list(generate_trials(experiments, seed, options.trials))
