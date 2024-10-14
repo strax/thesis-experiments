@@ -53,16 +53,17 @@ class SimulatorFunction[*T](Protocol):
     ) -> NDArray: ...
 
 
-def with_constraint[
-    *T
-](
+def with_constraint[*T](
     inner: SimulatorFunction[*T], constraint: Callable[[*T], NDArray[np.bool_]]
 ) -> SimulatorFunction[*T]:
     @wraps(inner)
     def wrapper(*args: *T, **kwargs):
-        out = inner(*args, **kwargs)
-        failed = ~constraint(*args)
-        out[failed] = np.nan
-        return out
+        simulated = inner(*args, **kwargs)
+        theta = np.stack(args, axis=-1)
+        return np.where(
+            constraint(theta),
+            simulated,
+            np.nan
+        )
 
     return wrapper

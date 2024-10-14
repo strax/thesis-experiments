@@ -9,7 +9,6 @@ import numpy as np
 from elfi.examples.gauss import gauss_nd_mean, ss_mean
 from elfi.methods.bo.gpy_regression import GPyRegression
 from numpy.typing import ArrayLike, NDArray
-from scipy.special import expit
 
 from harness.constraints import Constraint
 
@@ -17,12 +16,6 @@ from . import ModelAndDiscrepancy, Bounds, ELFIInferenceProblem, SimulatorFuncti
 
 MU1_MIN, MU1_MAX = 0, 8
 MU2_MIN, MU2_MAX = 0, 8
-
-def corner1(x, y, a=5, b=10, scale=8):
-    x = x / scale
-    y = y / scale
-    z = expit((x + y - 1) * (a + b * np.square(x - y)))
-    return (1 - 2 * np.minimum(z, 0.5)) <= 0.9
 
 def _mahalanobis_discrepancy(simulated, observed, vi):
     w = simulated - observed

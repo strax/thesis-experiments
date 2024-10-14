@@ -30,9 +30,10 @@ from numpy.random import SeedSequence
 from tabulate import tabulate
 
 from harness import FeasibilityEstimatorKind
+from harness.constraints import corner1
 from harness.random import seed2int
 from harness.elfi.tasks import ELFIInferenceProblem, SupportsBuildTargetModel
-from harness.elfi.tasks.gauss2d import Gauss2D, corner1
+from harness.elfi.tasks.gauss2d import Gauss2D
 from harness.logging import get_logger, configure_logging, Logger
 from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
