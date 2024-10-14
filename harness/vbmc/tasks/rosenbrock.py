@@ -50,7 +50,7 @@ class Rosenbrock(VBMCInferenceProblem):
     def log_likelihood(self, x):
         p = -1e-2 * rosen(x)
         if self.constraint is not None:
-            return jnp.where(self.constraint(x), p, jnp.nan)
+            return jnp.where(self.constraint(x) >= 0.5, p, jnp.nan)
         return p
 
 ROSENBROCK_HS1 = Rosenbrock().with_constraint(BoxConstraint(None, (-0.5, None)))

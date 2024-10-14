@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Protocol, override
 
+import jax.numpy as jnp
 from jaxtyping import ArrayLike
 
 
@@ -23,7 +24,7 @@ class FunctionConstraint:
 
     @override
     def __call__(self, theta):
-        return self.func(theta)
+        return jnp.float_(self.func(theta))
 
     def __str__(self):
         return self.name

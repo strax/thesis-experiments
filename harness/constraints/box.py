@@ -30,7 +30,7 @@ class BoxConstraint:
         self.b = jnp.array(b)
 
     def __call__(self, theta):
-        return jnp.all((self.a <= theta) & (theta <= self.b), axis=-1)
+        return jnp.float_(jnp.all((self.a <= theta) & (theta <= self.b), axis=-1))
 
     def __str__(self):
         formatted_constraints = []

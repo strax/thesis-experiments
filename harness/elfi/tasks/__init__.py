@@ -52,16 +52,20 @@ class SimulatorFunction[*T](Protocol):
         random_state: RandomState,
     ) -> NDArray: ...
 
-
 def with_constraint[*T](
     inner: SimulatorFunction[*T], constraint: Callable[[*T], NDArray[np.bool_]]
 ) -> SimulatorFunction[*T]:
     @wraps(inner)
-    def wrapper(*args: *T, **kwargs):
-        simulated = inner(*args, **kwargs)
+    def wrapper(*args: *T, batch_size: int, random_state: RandomState):
+        simulated = inner(*args, batch_size=batch_size, random_state=random_state)
         theta = np.stack(args, axis=-1)
+        p_feasible = constraint(theta)
+        # Sample Bernoulli rvs for each p_feasible
+        # NOTE: Because `random_sample` returns values in the half-open range 0 <= x < 1,
+        #       for deterministic constraints this step is simply a no-op.
+        feasible = random_state.random_sample(np.shape(p_feasible)) < p_feasible
         return np.where(
-            constraint(theta),
+            feasible,
             simulated,
             np.nan
         )
