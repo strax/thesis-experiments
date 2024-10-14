@@ -19,7 +19,7 @@ def cubicline(theta):
 
 
 @constraint()
-def corner1_stochastic(theta, a=5, b=10, scale=8):
+def corner1_stochastic(theta, a=5, b=10, scale=5):
     x, y = jnp.unstack(theta, axis=-1)
     x = x / scale
     y = y / scale
@@ -27,7 +27,7 @@ def corner1_stochastic(theta, a=5, b=10, scale=8):
     return 2 * jnp.minimum(z, 0.5)
 
 @constraint()
-def corner1(theta, a=5, b=10, scale=8):
+def corner1(theta, a=5, b=10, scale=5):
     corner1_stochastic(theta, a=a, b=b, scale=scale) >= 0.1
 
 
