@@ -1,4 +1,5 @@
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Callable, Protocol, override
 
 from jaxtyping import ArrayLike
 
@@ -9,4 +10,27 @@ class Constraint(Protocol):
 
     def __call__(self, theta: ArrayLike) -> ArrayLike: ...
 
-__all__ = ["Constraint"]
+@dataclass(init=False)
+class FunctionConstraint:
+    func: Callable[[ArrayLike], ArrayLike]
+    name: str
+
+    def __init__(self, func: Callable[[ArrayLike], ArrayLike], *, name: str | None = None):
+        if name is None:
+            name = func.__name__
+        self.func = func
+        self.name = name
+
+    @override
+    def __call__(self, theta):
+        return self.func(theta)
+
+    def __str__(self):
+        return self.name
+
+def constraint(*, name: str | None = None):
+    def decorator(func: Callable[[ArrayLike], ArrayLike]) -> FunctionConstraint:
+        return FunctionConstraint(func, name=name)
+    return decorator
+
+__all__ = ["Constraint", "FunctionConstraint", "constraint"]
