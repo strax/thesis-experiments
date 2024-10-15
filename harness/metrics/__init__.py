@@ -5,6 +5,8 @@ from pyvbmc.stats import kl_div_mvn, kde_1d
 from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 
+from .c2st import c2st, c2st_auc
+
 def wasserstein_distance(x1, x2):
     # FIXME: Check that multidimensional samples are handled correctly
     return pyemd.emd_samples(x1, x2)
@@ -82,4 +84,4 @@ def marginal_total_variation(xx1, xx2):
 
     return mtv
 
-__all__ = ["wasserstein_distance", "gauss_symm_kl_divergence", "marginal_total_variation"]
+__all__ = ["c2st", "c2st_auc", "wasserstein_distance", "gauss_symm_kl_divergence", "marginal_total_variation"]
