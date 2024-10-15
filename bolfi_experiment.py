@@ -74,6 +74,8 @@ class TrialResult:
     experiment: str
     seed: int
     feasibility_estimator: FeasibilityEstimatorKind
+    reference_posterior_name: str
+    posterior_feasibility_adjustment: bool
     # endregion
 
     # region Configuration
@@ -115,6 +117,7 @@ def run_bolfi(
     logger: Logger,
     options: Options,
     feasibility_estimator: FeasibilityEstimatorKind,
+    posterior_feasibility_adjustment: bool = False,
     bolfi_kwargs = dict()
 ) -> BOLFIResult:
     seed = seed2int(seed)
@@ -150,9 +153,12 @@ def run_bolfi(
         f"Inference completed in {inference_runtime}", failures=bolfi.n_failures
     )
 
-    logger.debug("Sampling from BOLFI posterior")
+    if posterior_feasibility_adjustment:
+        logger.debug("Sampling from BOLFI posterior with feasibility adjustment")
+    else:
+        logger.debug("Sampling from BOLFI posterior")
     try:
-        sample = bolfi.sample(options.bolfi_sample_count, verbose=True)
+        sample = bolfi.sample(options.bolfi_sample_count, verbose=True, feasibility_adjustment=posterior_feasibility_adjustment)
     except ValueError as err:
         logger.warning(str(err))
         sample = None
@@ -177,12 +183,15 @@ def run_trial(
     seed: SeedSequence,
     *,
     feasibility_estimator: FeasibilityEstimatorKind,
+    reference_posterior_name: str,
+    posterior_feasibility_adjustment: bool,
     options: Options,
     logger: Logger
 ):
     logger.info("Executing task")
 
-    reference_sample = get_reference_posterior(inference_problem.name, options=options)
+    logger.debug("Loading reference posterior '%s'", reference_posterior_name)
+    reference_sample = get_reference_posterior(reference_posterior_name, options=options)
 
     bolfi_result = run_bolfi(
         inference_problem=inference_problem,
@@ -190,6 +199,7 @@ def run_trial(
         options=options,
         logger=logger,
         feasibility_estimator=feasibility_estimator,
+        posterior_feasibility_adjustment=posterior_feasibility_adjustment
     )
 
     if bolfi_result.sample is not None:
@@ -213,6 +223,8 @@ def run_trial(
         bolfi_sample_count=bolfi_sample_count,
         experiment=name,
         feasibility_estimator=feasibility_estimator,
+        reference_posterior_name=reference_posterior_name,
+        posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         gskl=gskl,
         mmtv=mmtv,
         inference_runtime=bolfi_result.inference_runtime,
@@ -233,6 +245,7 @@ class BOLFITrial:
     index: int
     seed: SeedSequence
     feasibility_estimator: FeasibilityEstimatorKind
+    posterior_feasibility_adjustment: bool
 
     @property
     def key(self):
@@ -246,12 +259,21 @@ class BOLFITrial:
     def name(self):
         return self.experiment.name
 
+    @property
+    def reference_posterior_name(self) -> str:
+        if self.posterior_feasibility_adjustment:
+            return self.experiment.name
+        else:
+            return self.inference_problem.name
+
     def __call__(self, *, options: Options, logger: Logger):
         return run_trial(
             self.experiment.name,
             self.inference_problem,
             self.seed,
             feasibility_estimator=self.feasibility_estimator,
+            reference_posterior_name=self.reference_posterior_name,
+            posterior_feasibility_adjustment=self.posterior_feasibility_adjustment,
             options=options,
             logger=logger
         )
@@ -363,7 +385,15 @@ def generate_trials(experiments: Iterable[BOLFIExperiment], seed: SeedSequence, 
                 experiment=experiment,
                 index=i,
                 seed=deepcopy(subseed),
-                feasibility_estimator=feasibility_estimator
+                feasibility_estimator=feasibility_estimator,
+                posterior_feasibility_adjustment=False
+            )
+            yield BOLFITrial(
+                experiment=experiment,
+                index=i,
+                seed=deepcopy(subseed),
+                feasibility_estimator=feasibility_estimator,
+                posterior_feasibility_adjustment=True
             )
 
 def print_task_plan(tasks: Iterable[BOLFITrial]):
@@ -373,10 +403,12 @@ def print_task_plan(tasks: Iterable[BOLFITrial]):
             i,
             trial.experiment.name,
             maybe(str, trial.experiment.inference_problem.constraint, ""),
-            trial.feasibility_estimator,
+            str(trial.feasibility_estimator).replace("none", ""),
+            trial.reference_posterior_name,
+            trial.posterior_feasibility_adjustment,
             seed2int(trial.seed)
         ])
-    print(tabulate(rows, headers=("ID", "Experiment", "Constraint", "Feasibility estimator", "Seed")))
+    print(tabulate(rows, headers=("ID", "Experiment", "Constraint", "Feasibility estimator", "Reference posterior", "Posterior adjustment", "Seed")))
 
 
 def main():
