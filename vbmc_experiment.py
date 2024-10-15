@@ -32,9 +32,9 @@ from pyvbmc.feasibility_estimation import OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from tabulate import tabulate
 
+import harness.metrics as metrics
 from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
-from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.random import seed2int
 from harness.timer import Timer
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
@@ -183,6 +183,7 @@ class VBMCTrialResult:
 
     # region Metrics
     gskl: float
+    c2st: float
     mmtv: float
     # endregion
 
@@ -275,6 +276,14 @@ def run_trial(
 
     logger.info("Task completed")
 
+    gskl = metrics.gauss_symm_kl_divergence(reference_sample, vp_samples)
+    mmtv = metrics.marginal_total_variation(reference_sample, vp_samples).mean()
+    c2st = metrics.c2st(
+        reference_sample[:options.vp_sample_count],
+        vp_samples,
+        random_state=np.random.RandomState(jax.random.bits(key, dtype=jnp.uint32).item())
+    )
+
     return VBMCTrialResult(
         experiment=name,
         feasibility_estimator=feasibility_estimator,
@@ -282,8 +291,9 @@ def run_trial(
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
-        gskl=gauss_symm_kl_divergence(reference_sample, vp_samples),
-        mmtv=marginal_total_variation(reference_sample, vp_samples).mean(),
+        gskl=gskl,
+        mmtv=mmtv,
+        c2st=c2st,
         seed=inference_result.seed,
         success=inference_result.success,
         convergence_status=inference_result.convergence_status,
