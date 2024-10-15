@@ -28,7 +28,7 @@ from jaxtyping import Array
 from numpy.typing import NDArray
 from numpy.random import SeedSequence
 from pyvbmc import VBMC, VariationalPosterior
-from pyvbmc.feasibility_estimation import OracleFeasibilityEstimator
+from pyvbmc.feasibility_estimation import FeasibilityEstimator, OracleFeasibilityEstimator
 from pyvbmc.feasibility_estimation.gpc2 import GPCFeasibilityEstimator
 from tabulate import tabulate
 
@@ -37,6 +37,8 @@ from harness import FeasibilityEstimatorKind
 from harness.logging import get_logger, configure_logging, Logger
 from harness.random import seed2int
 from harness.timer import Timer
+from harness.utils import maybe
+from harness.vbmc.posterior_adjustment import feasibility_adjusted_sample
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from harness.vbmc.tasks import VBMCInferenceProblem
 from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3
@@ -190,8 +192,8 @@ class VBMCTrialResult:
 def redirect_logging_to_stderr():
     logging.basicConfig(stream=sys.stderr, format="%(message)s")
 
-def get_reference_posterior(model: VBMCInferenceProblem, *, options: Options, constrained = False):
-    return np.load(POSTERIORS_PATH / Path(model.name).with_suffix(".npy"))
+def get_reference_posterior(name: str):
+    return np.load(POSTERIORS_PATH / Path(name).with_suffix(".npy"))
 
 def run_vbmc(
     model: VBMCInferenceProblem,
@@ -247,20 +249,22 @@ def run_trial(
     model: VBMCInferenceProblem,
     key: Array,
     *,
-    feasibility_estimator: FeasibilityEstimatorKind,
+    feasibility_estimator_kind: FeasibilityEstimatorKind,
+    feasibility_adjustment: bool,
     reference_sample: NDArray,
     options: Options,
     logger: Logger
 ) -> VBMCTrialResult:
     logger.info("Executing task")
 
+    feasibility_estimator = make_feasibility_estimator(
+        feasibility_estimator_kind, model.constraint
+    )
     inference_result = run_vbmc(
         model,
         key=key,
         vbmc_options=dict(
-            feasibility_estimator=make_feasibility_estimator(
-                feasibility_estimator, model.constraint
-            )
+            feasibility_estimator=feasibility_estimator
         ),
         logger=logger
     )
@@ -271,7 +275,17 @@ def run_trial(
     else:
         logger.debug(f"Inference completed in {timedelta(seconds=inference_result.runtime)}", elbo=inference_result.elbo, elbo_sd=inference_result.elbo_sd)
 
-    vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
+    if feasibility_adjusted_sample:
+        assert feasibility_estimator is not None
+        logger.debug("Sampling with feasibility adjustment")
+        vp_samples = feasibility_adjusted_sample(
+            inference_result.vp,
+            feasibility_estimator,
+            options.vp_sample_count,
+            rng=np.random.default_rng(jax.random.bits(key, dtype=jnp.uint32).item())
+        )
+    else:
+        vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
     logger.debug(f"Generated {options.vp_sample_count} samples from variational posterior", checksum=crc32(vp_samples))
 
     logger.info("Task completed")
@@ -286,7 +300,7 @@ def run_trial(
 
     return VBMCTrialResult(
         experiment=name,
-        feasibility_estimator=feasibility_estimator,
+        feasibility_estimator=feasibility_estimator_kind,
         vp_sample_checksum=crc32(vp_samples),
         vp_sample_count=options.vp_sample_count,
         reference_sample_checksum=crc32(reference_sample),
@@ -315,18 +329,21 @@ def run_trial_ext(
     seed: int,
     *,
     feasibility_estimator: FeasibilityEstimatorKind,
+    feasibility_adjustment: bool,
+    reference_posterior_name: str,
     options: Options,
     logger: Logger
 ):
-    reference_posterior = get_reference_posterior(model.without_constraints(), options=options)
-    logger.debug(f"Loaded reference posterior", checksum=crc32(reference_posterior))
+    reference_posterior = get_reference_posterior(reference_posterior_name)
+    logger.debug(f"Loaded reference posterior", name=reference_posterior_name, checksum=crc32(reference_posterior))
 
     return run_trial(
         name,
         model,
         jax.random.key(seed),
         logger=logger,
-        feasibility_estimator=feasibility_estimator,
+        feasibility_estimator_kind=feasibility_estimator,
+        feasibility_adjustment=feasibility_adjustment,
         reference_sample=reference_posterior,
         options=options
     )
@@ -348,6 +365,7 @@ class VBMCTrial:
     index: int
     seed: SeedSequence
     feasibility_estimator: FeasibilityEstimatorKind
+    feasibility_adjustment: bool
 
     @property
     def model(self):
@@ -357,12 +375,21 @@ class VBMCTrial:
     def name(self):
         return f"{self.experiment.name}/{self.index}"
 
+    @property
+    def reference_posterior_name(self):
+        if self.feasibility_adjustment:
+            return self.experiment.name
+        else:
+            return self.experiment.model.without_constraints().name
+
     def __call__(self, *, options: Options, logger: Logger):
         return run_trial_ext(
             self.experiment.name,
             self.experiment.model,
             seed2int(self.seed),
             feasibility_estimator=self.feasibility_estimator,
+            feasibility_adjustment=self.feasibility_adjustment,
+            reference_posterior_name=self.reference_posterior_name,
             options=options,
             logger=logger
         )
@@ -370,24 +397,42 @@ class VBMCTrial:
 def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n_trials: int):
     # Trials
     for (experiment, (i, subseed)) in product(experiments, enumerate(seed.spawn(n_trials))):
-        if experiment.model.constraint is None:
-            feasibility_estimators = [FeasibilityEstimatorKind.NONE]
-        else:
+        is_constrained = experiment.model.constraint is not None
+        if is_constrained:
             feasibility_estimators = list(FeasibilityEstimatorKind)
+        else:
+            feasibility_estimators = [FeasibilityEstimatorKind.NONE]
 
         for feasibility_estimator in feasibility_estimators:
             yield VBMCTrial(
                 experiment=experiment,
                 index=i,
                 seed=deepcopy(subseed),
-                feasibility_estimator=feasibility_estimator
+                feasibility_estimator=feasibility_estimator,
+                feasibility_adjustment=False
             )
+            if is_constrained:
+                yield VBMCTrial(
+                    experiment=experiment,
+                    index=i,
+                    seed=deepcopy(subseed),
+                    feasibility_estimator=feasibility_estimator,
+                    feasibility_adjustment=True
+                )
 
 def print_task_plan(tasks: Iterable[VBMCTrial]):
     rows = []
     for i, trial in enumerate(tasks):
-        rows.append([i, trial.experiment.name, trial.experiment.model.constraint, trial.feasibility_estimator, seed2int(trial.seed)])
-    print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Seed")))
+        rows.append([
+            i,
+            trial.experiment.name,
+            maybe(str, trial.experiment.model.constraint, ""),
+            trial.feasibility_estimator.replace("none", ""),
+            trial.reference_posterior_name,
+            trial.feasibility_adjustment,
+            seed2int(trial.seed)
+        ])
+    print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Reference posterior", "Posterior adjustment", "Seed")))
 
 def main():
     options = Options.from_args()

@@ -1,18 +1,25 @@
 from copy import deepcopy
 from contextlib import contextmanager
 
+import numpy as np
 import numpy.random
 import jax.numpy as jnp
 import jax.random
 from jax import Array
-from numpy.random import SeedSequence
+from numpy.random import SeedSequence, RandomState, Generator
 
 @contextmanager
-def deterministic_random_state(seed: int | Array):
+def deterministic_random_state(seed: int | Array | RandomState | Generator):
     """Context manager to override the global PRNG seed for the duration of the body."""
     if isinstance(seed, Array):
         assert jnp.issubdtype(seed.dtype, jax.dtypes.prng_key), ValueError("expected dtype 'jax.dtypes.prng_key'")
         seed = jax.random.bits(seed, dtype=jnp.uint32).item()
+    if isinstance(seed, RandomState):
+        seed = np.array(seed.tomaxint()).astype(np.uint32)
+    if isinstance(seed, Generator):
+        seed = np.array(seed.bit_generator.random_raw()).astype(np.uint32)
+    if isinstance(seed, SeedSequence):
+        seed = seed2int(seed)
 
     random_state = numpy.random.get_state()
     try:
