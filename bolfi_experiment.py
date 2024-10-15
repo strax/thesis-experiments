@@ -31,13 +31,13 @@ from numpy.typing import NDArray
 from numpy.random import SeedSequence
 from tabulate import tabulate
 
+import harness.metrics as metrics
 from harness import FeasibilityEstimatorKind
 from harness.constraints import corner1, corner1_stoch
 from harness.random import seed2int
 from harness.elfi.tasks import ELFIInferenceProblem, SupportsBuildTargetModel
 from harness.elfi.tasks.gauss2d import Gauss2D
 from harness.logging import get_logger, configure_logging, Logger
-from harness.metrics import gauss_symm_kl_divergence, marginal_total_variation
 from harness.timer import Timer
 from harness.utils import maybe
 
@@ -92,6 +92,7 @@ class TrialResult:
     # region Outcomes
     gskl: float
     mmtv: float
+    c2st: float
     inference_runtime: float
     # endregion
 
@@ -204,18 +205,24 @@ def run_trial(
 
     if bolfi_result.sample is not None:
         bolfi_sample_count = bolfi_result.sample.n_samples
-        gskl = gauss_symm_kl_divergence(
+        gskl = metrics.gauss_symm_kl_divergence(
             reference_sample, bolfi_result.sample.samples_array
         )
-        mmtv = marginal_total_variation(
+        mmtv = metrics.marginal_total_variation(
             reference_sample, bolfi_result.sample.samples_array
         ).mean()
+        c2st = metrics.c2st(
+            reference_sample[:bolfi_result.sample.n_samples],
+            bolfi_result.sample.samples_array,
+            random_state=np.random.RandomState(seed.generate_state(4))
+        )
         sample_checksum = compute_sample_checksum(bolfi_result.sample)
     else:
         bolfi_sample_count = 0
         sample_checksum = 0
         gskl = np.nan
         mmtv = np.nan
+        c2st = np.nan
 
     logger.info("Task completed")
     return TrialResult(
@@ -227,6 +234,7 @@ def run_trial(
         posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         gskl=gskl,
         mmtv=mmtv,
+        c2st=c2st,
         inference_runtime=bolfi_result.inference_runtime,
         n_evidence=bolfi_result.n_evidence,
         n_failures=bolfi_result.n_failures,
