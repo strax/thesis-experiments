@@ -36,6 +36,8 @@ def c2st(
     References:
         [1]: https://scikit-learn.org/stable/modules/cross_validation.html
     """
+    assert np.shape(X) == np.shape(Y), ValueError("X and Y must have the same shape")
+
     if z_score:
         X_mean = np.mean(X, axis=0)
         X_std = np.std(X, axis=0)
