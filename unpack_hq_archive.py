@@ -43,9 +43,9 @@ def main():
                     else:
                         rows.append(pd.read_json(file, typ='series').to_frame().transpose())
                 except ValueError as err:
-                    abort(f"error: {file.name}: {str(err)}")
+                    eprint(f"warning: {file.name}: {str(err)}")
                 except pd.errors.EmptyDataError as err:
-                    abort(f"error: {file.name}: {str(err)}")
+                    eprint(f"warning: {file.name}: {str(err)}")
     except FileNotFoundError as err:
         abort(f"error: {err.strerror}: {err.filename}")
     except tarfile.ReadError:
