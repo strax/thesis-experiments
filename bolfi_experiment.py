@@ -396,13 +396,14 @@ def generate_trials(experiments: Iterable[BOLFIExperiment], seed: SeedSequence, 
                 feasibility_estimator=feasibility_estimator,
                 posterior_feasibility_adjustment=False
             )
-            yield BOLFITrial(
-                experiment=experiment,
-                index=i,
-                seed=deepcopy(subseed),
-                feasibility_estimator=feasibility_estimator,
-                posterior_feasibility_adjustment=True
-            )
+            if experiment.inference_problem.constraint is not None:
+                yield BOLFITrial(
+                    experiment=experiment,
+                    index=i,
+                    seed=deepcopy(subseed),
+                    feasibility_estimator=feasibility_estimator,
+                    posterior_feasibility_adjustment=True
+                )
 
 def print_task_plan(tasks: Iterable[BOLFITrial]):
     rows = []
