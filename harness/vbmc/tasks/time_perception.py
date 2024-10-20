@@ -99,7 +99,7 @@ class TimePerception:
 
         w_s, w_m, mu_p, sigma_p, lambda_ = theta
 
-        dr = self.data.binsize
+        binsize = self.data.binsize
 
         srange = jnp.expand_dims(jnp.linspace(0, 2, NS), 1)
         ds = srange[1, 0] - srange[0, 0]
@@ -129,18 +129,18 @@ class TimePerception:
             idx = self.data.X[:, 2] == i + 1
 
             sigma_m = w_m * s_hat
-            if dr > 0:
+            if binsize > 0:
                 pr = jst.norm.cdf(
-                    self.data.R[idx] + 0.5 * dr, s_hat, sigma_m
-                ) - jst.norm.cdf(self.data.R[idx] - 0.5 * dr, s_hat, sigma_m)
+                    self.data.R[idx] + 0.5 * binsize, s_hat, sigma_m
+                ) - jst.norm.cdf(self.data.R[idx] - 0.5 * binsize, s_hat, sigma_m)
             else:
                 pr = jst.norm.pdf(self.data.R[idx], s_hat, sigma_m)
 
             out = out.at[idx].set(jnp.trapezoid(xpdf * pr, axis=1, dx=dx))
 
-        if dr > 0:
+        if binsize > 0:
             out = jnp.log(
-                out * (1 - lambda_) + lambda_ / ((srange[-1] - srange[0]) / dr)
+                out * (1 - lambda_) + lambda_ / ((srange[-1] - srange[0]) / binsize)
             )
         else:
             out = jnp.log(out * (1 - lambda_) + lambda_ / (srange[-1] - srange[0]))
