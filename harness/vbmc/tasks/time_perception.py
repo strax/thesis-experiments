@@ -88,7 +88,7 @@ class TimePerception:
 
     @property
     def constraining_bijector(self) -> tfb.Bijector:
-        return tfb.SoftClip(*self.bounds)
+        return tfb.Blockwise([tfb.Sigmoid(a, b) for a, b in zip(*self.bounds)])
 
     def log_likelihood(self, theta):
         chex.assert_size(theta, self.ndim)
