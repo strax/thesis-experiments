@@ -101,18 +101,18 @@ class TimePerception:
 
         dr = self.data.binsize
 
-        srange = jnp.linspace(0, 2, NS)[:, None]
+        srange = jnp.expand_dims(jnp.linspace(0, 2, NS), 1)
         ds = srange[1, 0] - srange[0, 0]
 
-        out = jnp.zeros((self.data.X.shape[0], 1))
+        out = jnp.zeros(self.data.X.shape[0])
 
         for i in range(0, jnp.size(self.data.S)):
             mu_s = self.data.S[i]
             sigma_s = w_s * mu_s
             xrange = jnp.linspace(
                 jnp.maximum(0, mu_s - MAXSD * sigma_s), mu_s + MAXSD * sigma_s, NX
-            )[None, :]
-            dx = xrange[0, 1] - xrange[0, 0]
+            )
+            dx = xrange[1] - xrange[0]
             xpdf = jst.norm.pdf(xrange, mu_s, sigma_s)
             xpdf = xpdf / jnp.trapezoid(xpdf, dx=dx)
 
@@ -136,7 +136,7 @@ class TimePerception:
             else:
                 pr = jst.norm.pdf(self.data.R[idx], s_hat, sigma_m)
 
-            out = out.at[idx].set(jnp.trapezoid(xpdf * pr, axis=1, dx=dx)[:, None])
+            out = out.at[idx].set(jnp.trapezoid(xpdf * pr, axis=1, dx=dx))
 
         if dr > 0:
             out = jnp.log(
