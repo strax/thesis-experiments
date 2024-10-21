@@ -60,6 +60,7 @@ def sample_chains(
     key: Array,
     n_chains: int = 4,
     diagonal_mass_matrix,
+    max_num_doublings: int,
     target_acceptance_rate: float
 ):
     assert jnp.ndim(initial_positions) > 1 and jnp.size(initial_positions, 0) == n_chains
@@ -75,7 +76,7 @@ def sample_chains(
             target_acceptance_rate=target_acceptance_rate
         )
 
-        kernel = blackjax.nuts(logdensity_fn, **sampler_params)
+        kernel = blackjax.nuts(logdensity_fn, max_num_doublings=max_num_doublings, **sampler_params)
 
         @jax.jit
         def sample_step(state, key):
@@ -117,6 +118,7 @@ def main():
     parser.add_argument("--chains", type=int, default=4, help="Number of chains to sample in parallel")
     parser.add_argument("--full-mass-matrix", action="store_true", help="Use full mass matrix in NUTS adaptation phase")
     parser.add_argument("--target-acceptance-rate", type=float, default=0.8, help="Target acceptance rate for window adaptation")
+    parser.add_argument("--nuts-max-doublings", type=int, default=10, help="Maximum number of doublings of the trajectory length before u-turning or diverging")
     parser.add_argument("--seed", type=int, default=0, help="RNG seed")
     args = parser.parse_args()
     adaptation_steps = args.adaptation_steps or args.samples
@@ -138,6 +140,8 @@ def main():
     timer = Timer()
     diagonal_mass_matrix = not args.full_mass_matrix
     logger.info(f"Target acceptance rate for window adaptation: {args.target_acceptance_rate}")
+    if args.max_doublings != 10:
+        logger.info(f"Overriding max_doublings with {args.max_doublings}")
     if diagonal_mass_matrix:
         logger.info("Using diagonal mass matrix in adaptation phase")
     else:
@@ -150,6 +154,7 @@ def main():
         n_adaptation_steps=adaptation_steps,
         key=key_sample,
         n_chains=args.chains,
+        max_num_doublings=args.max_doublings,
         diagonal_mass_matrix=diagonal_mass_matrix,
         target_acceptance_rate=args.target_acceptance_rate
     )
