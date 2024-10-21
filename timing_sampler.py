@@ -98,6 +98,8 @@ def main():
     args = parser.parse_args()
     adaptation_steps = args.adaptation_steps or args.samples
 
+    jax.print_environment_info()
+
     key = jax.random.key(0)
     key_sample, key_init = jax.random.split(key, 2)
 
