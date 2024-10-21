@@ -12,6 +12,7 @@ import jax.numpy as jnp
 import tensorflow_probability.substrates.jax as tfp
 
 from jaxtyping import Array
+from harness.logging import get_logger, configure_logging
 from harness.utils import smap
 from harness.timer import Timer
 from harness.vbmc.tasks.time_perception import TimePerception
@@ -20,7 +21,8 @@ tfb = tfp.bijectors
 tfd = tfp.distributions
 
 MODEL = TimePerception.from_mat("./timing.mat")
-SEED = jax.random.key(0)
+
+logger = get_logger()
 
 @jax.jit
 def unconstrained_log_prob(theta):
@@ -110,12 +112,15 @@ def main():
     parser.add_argument("--adaptation-steps", type=int, help="Number of adaptation steps to take")
     parser.add_argument("--chains", type=int, default=4, help="Number of chains to sample in parallel")
     parser.add_argument("--full-mass-matrix", action="store_true", help="Use full mass matrix in NUTS adaptation phase")
+    parser.add_argument("--seed", type=int, default=0, help="RNG seed")
     args = parser.parse_args()
     adaptation_steps = args.adaptation_steps or args.samples
 
+    configure_logging(True)
+
     jax.print_environment_info()
 
-    key = jax.random.key(0)
+    key = jax.random.key(args.seed)
     key_sample, key_init = jax.random.split(key, 2)
 
     initial_positions = tfp.experimental.mcmc.retry_init(
@@ -124,16 +129,14 @@ def main():
         seed=key_init,
         sample_shape=(args.chains,)
     )
-    print("[*] Initial positions:")
-    print(initial_positions)
 
     timer = Timer()
     diagonal_mass_matrix = not args.full_mass_matrix
     if diagonal_mass_matrix:
-        print("Using diagonal mass matrix in adaptation phase")
+        logger.info("Using diagonal mass matrix in adaptation phase")
     else:
-        print("Using full mass matrix in adaptation phase")
-    print(f"[*] Sampling {args.chains} chains, {args.samples} samples each with {adaptation_steps} adaptation steps")
+        logger.info("Using full mass matrix in adaptation phase")
+    logger.info(f"Sampling {args.chains} chains, {args.samples} samples each with {adaptation_steps} adaptation steps")
     result = sample_chains(
         unconstrained_log_prob,
         initial_positions,
@@ -144,11 +147,11 @@ def main():
         diagonal_mass_matrix=diagonal_mass_matrix
     )
     states, info = jax.block_until_ready(result)
-    print(f"[*] Sampled in {timer.elapsed}")
+    logger.info(f"Sampled in {timer.elapsed}")
     inference_data = to_arviz(states, info)
-    print(az.summary(inference_data, kind="diagnostics", round_to=6))
+    print(az.summary(inference_data, kind="diagnostics", round_to=6), flush=True)
     inference_data.to_netcdf("timing.nc")
-    print("[*] Saved result")
+    logger.debug("Saved result")
 
 if __name__ == "__main__":
     main()
