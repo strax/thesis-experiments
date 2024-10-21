@@ -2,11 +2,18 @@ from functools import wraps
 from typing import cast, Callable
 
 import jax
+import jax.numpy as jnp
 
 def maybe[T, U](func: Callable[[T], U], value: T | None, default: U) -> U:
     if value is None:
         return default
     return func(value)
+
+def tree_concatenate(*trees, axis=0):
+    return jax.tree.map(lambda *v: jnp.concatenate(v, axis=axis), *trees)
+
+def ceil_div(a: int, b: int):
+    return -(a // -b)
 
 def smap[F: Callable](fun: F) -> F:
     """

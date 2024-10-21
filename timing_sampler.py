@@ -1,19 +1,20 @@
 import jax
 jax.config.update('jax_enable_x64', True)
 
-from argparse import ArgumentParser, BooleanOptionalAction
-from typing import Any, NamedTuple
+import pickle
+from argparse import ArgumentParser
+from functools import partial
+from pathlib import Path
 
 import arviz as az
-import blackjax
 import numpy as np
 import jax
 import jax.numpy as jnp
 import tensorflow_probability.substrates.jax as tfp
 
-from jaxtyping import Array
 from harness.logging import get_logger, configure_logging
-from harness.utils import smap
+from harness.mcmc.nuts import NUTS, CheckpointableState, Trace
+from harness.utils import smap, tree_concatenate
 from harness.timer import Timer
 from harness.vbmc.tasks.time_perception import TimePerception
 
@@ -32,74 +33,14 @@ def unconstrained_log_prob(theta):
 
 dmap = jax.pmap if jax.local_device_count() > 1 else smap
 
-def run_warmup(
-    logdensity_fn,
-    initial_position: Array,
-    key: Array,
-    num_steps: int,
-    *,
-    diagonal_mass_matrix: bool,
-    target_acceptance_rate: float
-):
-    window_adaptation = blackjax.window_adaptation(
-        blackjax.nuts,
-        logdensity_fn,
-        is_mass_matrix_diagonal=diagonal_mass_matrix,
-        target_acceptance_rate=target_acceptance_rate,
-        progress_bar=False
-    )
-    (state, params), _ = window_adaptation.run(key, initial_position, num_steps=num_steps)
-    return state, params
-
-def sample_chains(
-    logdensity_fn,
-    initial_positions,
-    *,
-    n_samples: int,
-    n_adaptation_steps,
-    key: Array,
-    n_chains: int = 4,
-    diagonal_mass_matrix,
-    max_num_doublings: int,
-    target_acceptance_rate: float
-):
-    assert jnp.ndim(initial_positions) > 1 and jnp.size(initial_positions, 0) == n_chains
-
-    def sample_chain(key_chain, initial_position):
-        key_adapt, key_sample = jax.random.split(key_chain, 2)
-        state, sampler_params = run_warmup(
-            logdensity_fn,
-            initial_position,
-            key_adapt,
-            n_adaptation_steps,
-            diagonal_mass_matrix=diagonal_mass_matrix,
-            target_acceptance_rate=target_acceptance_rate
-        )
-
-        kernel = blackjax.nuts(logdensity_fn, max_num_doublings=max_num_doublings, **sampler_params)
-
-        @jax.jit
-        def sample_step(state, key):
-            state, info = kernel.step(key, state)
-            return state, (state, info)
-
-        keys = jax.random.split(key_sample, n_samples)
-        _, (states, info) = jax.lax.scan(sample_step, state, keys)
-
-        return states, info
-
-    states, info = dmap(sample_chain)(jax.random.split(key, n_chains), initial_positions)
-    return states, info
-
-VARIABLE_NAMES = ["ws", "wm", "mu_prior", "sigma_prior", "lambda"]
-
-def to_arviz(states, info) -> az.InferenceData:
+def to_arviz(trace: Trace) -> az.InferenceData:
+    states, info = trace
     unconstrained_chains = states.position
     constrained_chains = MODEL.constraining_bijector.forward(states.position)
     inference_data = az.InferenceData()
     for samples, group in zip((constrained_chains, unconstrained_chains), ('posterior', 'unconstrained_posterior')):
         inference_data.add_groups(
-            {group: dict((k, np.asarray(v)) for k, v in zip(VARIABLE_NAMES, jnp.unstack(samples, axis=-1)))}
+            {group: dict((k, np.asarray(v)) for k, v in zip(MODEL.variable_names, jnp.unstack(samples, axis=-1)))}
         )
     inference_data.add_groups(sample_stats={
         'lp': states.logdensity,
@@ -111,6 +52,7 @@ def to_arviz(states, info) -> az.InferenceData:
 
     return inference_data
 
+
 def main():
     parser = ArgumentParser()
     parser.add_argument("--samples", type=int, default=100, help="Number of samples to draw from the chains")
@@ -120,12 +62,22 @@ def main():
     parser.add_argument("--target-acceptance-rate", type=float, default=0.8, help="Target acceptance rate for window adaptation")
     parser.add_argument("--nuts-max-doublings", type=int, default=10, help="Maximum number of doublings of the trajectory length before u-turning or diverging")
     parser.add_argument("--seed", type=int, default=0, help="RNG seed")
+    parser.add_argument("--checkpoint-name", type=str, default=0, help="Create checkpoints with the given name")
+    parser.add_argument("--continue-from-checkpoint", action="store_true", help="Continue from the given checkpoint")
+    parser.add_argument("--checkpoint-interval", type=int, default=1000, help="Number of steps between checkpoints in sampling phase")
     args = parser.parse_args()
     adaptation_steps = args.adaptation_steps or args.samples
+    checkpoint_name = args.checkpoint_name
+    continue_from_checkpoint = args.continue_from_checkpoint
+    checkpoint_interval = args.checkpoint_interval
+    checkpoints_enabled = checkpoint_name is not None
 
     configure_logging(True)
 
     jax.print_environment_info()
+
+    if checkpoints_enabled:
+        logger.info("Checkpointing enabled", checkpoint_name=checkpoint_name)
 
     key = jax.random.key(args.seed)
     key_sample, key_init = jax.random.split(key, 2)
@@ -140,28 +92,77 @@ def main():
     timer = Timer()
     diagonal_mass_matrix = not args.full_mass_matrix
     logger.info(f"Target acceptance rate for window adaptation: {args.target_acceptance_rate}")
-    max_num_doublings = args.nuts_max_doublings
-    if max_num_doublings != 10:
-        logger.info(f"Overriding max_doublings with {max_num_doublings}")
+    num_max_doublings = args.nuts_max_doublings
+    if num_max_doublings != 10:
+        logger.info(f"Overriding max_doublings with {num_max_doublings}")
     if diagonal_mass_matrix:
         logger.info("Using diagonal mass matrix in adaptation phase")
     else:
         logger.info("Using full mass matrix in adaptation phase")
-    logger.info(f"Sampling {args.chains} chains, {args.samples} samples each with {adaptation_steps} adaptation steps")
-    result = sample_chains(
-        unconstrained_log_prob,
-        initial_positions,
-        n_samples=args.samples,
-        n_adaptation_steps=adaptation_steps,
-        key=key_sample,
-        n_chains=args.chains,
-        max_num_doublings=max_num_doublings,
-        diagonal_mass_matrix=diagonal_mass_matrix,
-        target_acceptance_rate=args.target_acceptance_rate
-    )
-    states, info = jax.block_until_ready(result)
+    if not continue_from_checkpoint:
+        logger.info(f"Sampling {args.chains} chains, {args.samples} samples each with {adaptation_steps} adaptation steps")
+
+    sampler = NUTS(unconstrained_log_prob, num_max_doublings=num_max_doublings)
+
+    if checkpoints_enabled:
+        checkpoint_path = Path(checkpoint_name).with_suffix(".checkpoint")
+        if checkpoint_path.exists():
+            if not continue_from_checkpoint:
+                logger.error("Checkpoint exists but --continue-from-checkpoint flag is not set.")
+                return
+        else:
+            if continue_from_checkpoint:
+                logger.warning("Checkpoint does not exist but --continue-from-checkpoint was passed; this is a no-op")
+
+    def run_window_adaptation(initial_position, chain_index):
+        key_chain = jax.random.fold_in(key_sample, chain_index)
+        return sampler.run_window_adaptation(
+            initial_position,
+            key_chain,
+            n_steps=adaptation_steps,
+            diagonal_mass_matrix=diagonal_mass_matrix,
+            target_acceptance_rate=args.target_acceptance_rate
+        )
+
+    def sample_chain(n_samples: int, state: CheckpointableState, chain_index):
+        @jax.jit
+        def step(state, _):
+            state, trace = sampler.step(state)
+            return state, trace
+
+        return jax.lax.scan(step, state, jnp.arange(n_samples))
+
+    def save_checkpoint(state: CheckpointableState, trace: Trace | None = None):
+        logger.info("Saving checkpoint")
+        with open(checkpoint_path, "wb") as file:
+            pickle.dump((state, trace), file)
+
+    if continue_from_checkpoint:
+        with open(checkpoint_path, "rb") as file:
+            state, trace = pickle.load(file)
+    else:
+        logger.info("Running window adaptation for each chain")
+        state = dmap(run_window_adaptation)(initial_positions, jnp.arange(0, args.chains))
+        trace = None
+        if checkpoints_enabled:
+            save_checkpoint(state, trace)
+
+    n_total_samples = args.samples
+    if checkpoints_enabled:
+        while n_total_samples > 0:
+            n_samples = min(checkpoint_interval, n_total_samples)
+            logger.info(f"Sampling in parallel for {n_samples} samples")
+            state, new_trace = dmap(partial(sample_chain, n_samples))(state, jnp.arange(0, args.chains))
+            trace = tree_concatenate(trace, new_trace, axis=1) if trace is not None else new_trace
+            save_checkpoint(state, trace)
+            n_total_samples -= n_samples
+    else:
+        state, new_trace = dmap(partial(sample_chain, n_total_samples), state)
+        trace = tree_concatenate(trace, new_trace, axis=1) if trace is not None else new_trace
+
+    trace = jax.block_until_ready(trace)
     logger.info(f"Sampled in {timer.elapsed}")
-    inference_data = to_arviz(states, info)
+    inference_data = to_arviz(trace)
     print(az.summary(inference_data, kind="diagnostics", round_to=6), flush=True)
     inference_data.to_netcdf("timing.nc")
     logger.debug("Saved result")
