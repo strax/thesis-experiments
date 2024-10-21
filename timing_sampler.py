@@ -78,16 +78,21 @@ def sample_chains(
 VARIABLE_NAMES = ["ws", "wm", "mu_prior", "sigma_prior", "lambda"]
 
 def to_arviz(states, info) -> az.InferenceData:
-    samples = MODEL.constraining_bijector.forward(states.position)
-    inference_data: az.InferenceData = az.convert_to_inference_data(
-        dict((k, np.asarray(v)) for k, v in zip(VARIABLE_NAMES, jnp.unstack(samples, axis=-1)))
-    )
+    unconstrained_chains = states.position
+    constrained_chains = MODEL.constraining_bijector.forward(states.position)
+    inference_data = az.InferenceData()
+    for samples, group in zip((constrained_chains, unconstrained_chains), ('posterior', 'unconstrained_posterior')):
+        inference_data.add_groups(
+            {group: dict((k, np.asarray(v)) for k, v in zip(VARIABLE_NAMES, jnp.unstack(samples, axis=-1)))}
+        )
     inference_data.add_groups(sample_stats={
+        'lp': states.logdensity,
         'acceptance_rate': info.acceptance_rate,
         'energy': info.energy,
         'diverging': info.is_divergent,
         'n_steps': info.num_integration_steps,
     })
+
     return inference_data
 
 def main():
