@@ -1,7 +1,7 @@
 import jax
 jax.config.update('jax_enable_x64', True)
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from typing import Any, NamedTuple
 
 import arviz as az
@@ -34,12 +34,14 @@ def run_warmup(
     logdensity_fn,
     initial_position: Array,
     key: Array,
-    num_steps: int
+    num_steps: int,
+    *,
+    diagonal_mass_matrix: bool
 ):
     window_adaptation = blackjax.window_adaptation(
         blackjax.nuts,
         logdensity_fn,
-        is_mass_matrix_diagonal=False,
+        is_mass_matrix_diagonal=diagonal_mass_matrix,
         progress_bar=False
     )
     (state, params), _ = window_adaptation.run(key, initial_position, num_steps=num_steps)
@@ -52,13 +54,20 @@ def sample_chains(
     n_samples: int,
     n_adaptation_steps,
     key: Array,
-    n_chains: int = 4
+    n_chains: int = 4,
+    diagonal_mass_matrix
 ):
     assert jnp.ndim(initial_positions) > 1 and jnp.size(initial_positions, 0) == n_chains
 
     def sample_chain(key_chain, initial_position):
         key_adapt, key_sample = jax.random.split(key_chain, 2)
-        state, sampler_params = run_warmup(logdensity_fn, initial_position, key_adapt, n_adaptation_steps)
+        state, sampler_params = run_warmup(
+            logdensity_fn,
+            initial_position,
+            key_adapt,
+            n_adaptation_steps,
+            diagonal_mass_matrix=diagonal_mass_matrix
+        )
 
         kernel = blackjax.nuts(logdensity_fn, **sampler_params)
 
@@ -100,6 +109,7 @@ def main():
     parser.add_argument("--samples", type=int, default=100, help="Number of samples to draw from the chains")
     parser.add_argument("--adaptation-steps", type=int, help="Number of adaptation steps to take")
     parser.add_argument("--chains", type=int, default=4, help="Number of chains to sample in parallel")
+    parser.add_argument("--full-mass-matrix", action="store_true", help="Use full mass matrix in NUTS adaptation phase")
     args = parser.parse_args()
     adaptation_steps = args.adaptation_steps or args.samples
 
@@ -118,6 +128,11 @@ def main():
     print(initial_positions)
 
     timer = Timer()
+    diagonal_mass_matrix = not args.full_mass_matrix
+    if diagonal_mass_matrix:
+        print("Using diagonal mass matrix in adaptation phase")
+    else:
+        print("Using full mass matrix in adaptation phase")
     print(f"[*] Sampling {args.chains} chains, {args.samples} samples each with {adaptation_steps} adaptation steps")
     result = sample_chains(
         unconstrained_log_prob,
@@ -125,7 +140,8 @@ def main():
         n_samples=args.samples,
         n_adaptation_steps=adaptation_steps,
         key=key_sample,
-        n_chains=args.chains
+        n_chains=args.chains,
+        diagonal_mass_matrix=diagonal_mass_matrix
     )
     states, info = jax.block_until_ready(result)
     print(f"[*] Sampled in {timer.elapsed}")
