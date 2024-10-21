@@ -140,8 +140,9 @@ def main():
     timer = Timer()
     diagonal_mass_matrix = not args.full_mass_matrix
     logger.info(f"Target acceptance rate for window adaptation: {args.target_acceptance_rate}")
-    if args.max_doublings != 10:
-        logger.info(f"Overriding max_doublings with {args.max_doublings}")
+    max_num_doublings = args.nuts_max_doublings
+    if max_num_doublings != 10:
+        logger.info(f"Overriding max_doublings with {max_num_doublings}")
     if diagonal_mass_matrix:
         logger.info("Using diagonal mass matrix in adaptation phase")
     else:
@@ -154,7 +155,7 @@ def main():
         n_adaptation_steps=adaptation_steps,
         key=key_sample,
         n_chains=args.chains,
-        max_num_doublings=args.max_doublings,
+        max_num_doublings=max_num_doublings,
         diagonal_mass_matrix=diagonal_mass_matrix,
         target_acceptance_rate=args.target_acceptance_rate
     )
