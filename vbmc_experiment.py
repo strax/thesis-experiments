@@ -255,14 +255,19 @@ def run_vbmc(
 def run_trial(
     name: str,
     model: VBMCInferenceProblem,
-    key: Array,
+    seed: int,
     *,
     feasibility_estimator_kind: FeasibilityEstimatorKind,
     feasibility_adjustment: bool,
-    reference_sample: NDArray,
+    reference_posterior_name: str,
     options: Options,
     logger: Logger
-) -> VBMCTrialResult:
+):
+    reference_sample = get_reference_posterior(reference_posterior_name)
+    logger.debug(f"Loaded reference posterior", name=reference_posterior_name, checksum=crc32(reference_sample))
+
+    key = jax.random.key(seed)
+
     logger.info("Executing task")
 
     feasibility_estimator = make_feasibility_estimator(
@@ -331,31 +336,6 @@ def run_trial(
         fe_optimize_runtime=inference_result.fe_optimize_runtime
     )
 
-def run_trial_ext(
-    name: str,
-    model: VBMCInferenceProblem,
-    seed: int,
-    *,
-    feasibility_estimator: FeasibilityEstimatorKind,
-    feasibility_adjustment: bool,
-    reference_posterior_name: str,
-    options: Options,
-    logger: Logger
-):
-    reference_posterior = get_reference_posterior(reference_posterior_name)
-    logger.debug(f"Loaded reference posterior", name=reference_posterior_name, checksum=crc32(reference_posterior))
-
-    return run_trial(
-        name,
-        model,
-        jax.random.key(seed),
-        logger=logger,
-        feasibility_estimator_kind=feasibility_estimator,
-        feasibility_adjustment=feasibility_adjustment,
-        reference_sample=reference_posterior,
-        options=options
-    )
-
 @dataclass
 class VBMCExperiment:
     name: str
@@ -391,11 +371,11 @@ class VBMCTrial:
             return without_constraints(self.experiment.model).name
 
     def __call__(self, *, options: Options, logger: Logger):
-        return run_trial_ext(
+        return run_trial(
             self.experiment.name,
             self.experiment.model,
             seed2int(self.seed),
-            feasibility_estimator=self.feasibility_estimator,
+            feasibility_estimator_kind=self.feasibility_estimator,
             feasibility_adjustment=self.feasibility_adjustment,
             reference_posterior_name=self.reference_posterior_name,
             options=options,
