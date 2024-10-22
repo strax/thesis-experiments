@@ -8,23 +8,19 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 
 from harness.test_functions import rosen
-from harness.constraints import Constraint, BoxConstraint
+from harness.constraints import BoxConstraint
 
-from . import VBMCInferenceProblem
+from . import VBMCInferenceProblem, InputConstrained
 
 tfd = tfp.distributions
 
 @dataclass(frozen=True)
 class Rosenbrock(VBMCInferenceProblem):
     ndim: int = 2
-    constraint: Constraint | None = None
 
     @property
     def name(self):
-        out = "rosenbrock"
-        if self.constraint is not None:
-            out += "+" + self.constraint.name
-        return out
+        return "rosenbrock"
 
     @property
     def bounds(self):
@@ -40,21 +36,11 @@ class Rosenbrock(VBMCInferenceProblem):
     def prior(self):
         return tfd.MultivariateNormalDiag(0.0, jnp.array([3.0, 3.0]))
 
-    def with_constraint(self, constraint: Constraint) -> Rosenbrock:
-        return replace(self, constraint=constraint)
-
-    @override
-    def without_constraints(self) -> Rosenbrock:
-        return replace(self, constraint=None)
-
     def log_likelihood(self, x):
-        p = -1e-2 * rosen(x)
-        if self.constraint is not None:
-            return jnp.where(self.constraint(x) >= 0.5, p, jnp.nan)
-        return p
+        return -1e-2 * rosen(x)
 
-ROSENBROCK_HS1 = Rosenbrock().with_constraint(BoxConstraint(None, (-0.5, None)))
-ROSENBROCK_HS2 = Rosenbrock().with_constraint(BoxConstraint(None, (-1.5, None)))
-ROSENBROCK_HS3 = Rosenbrock().with_constraint(BoxConstraint(None, (-2.5, None)))
+ROSENBROCK_HS1 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-0.5, None)))
+ROSENBROCK_HS2 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-1.5, None)))
+ROSENBROCK_HS3 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-2.5, None)))
 
 __all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3"]
