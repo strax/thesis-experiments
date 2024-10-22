@@ -315,8 +315,7 @@ def run_trial(
     else:
         logger.debug(f"Inference completed in {timedelta(seconds=inference_result.runtime)}", elbo=inference_result.elbo, elbo_sd=inference_result.elbo_sd)
 
-    if feasibility_adjustment:
-        assert feasibility_estimator is not None
+    if feasibility_adjustment and feasibility_estimator is not None:
         logger.debug("Sampling with feasibility adjustment")
         vp_samples = feasibility_adjusted_sample(
             inference_result.vp,
