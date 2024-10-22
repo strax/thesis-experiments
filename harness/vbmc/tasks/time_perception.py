@@ -52,7 +52,7 @@ class TimePerception:
         return TimePerception.from_dict(loadmat(str(path), simplify_cells=True)["y"])
 
     @staticmethod
-    def from_dict(data: dict) -> TimePerceptionData:
+    def from_dict(data: dict) -> TimePerception:
         assert data["D"] == 5
         plb = np.copy(data["PLB"])
         plb[1] = 0.02
