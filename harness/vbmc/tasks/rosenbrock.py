@@ -39,9 +39,10 @@ class Rosenbrock(VBMCInferenceProblem):
     def log_likelihood(self, x):
         return -1e-2 * rosen(x)
 
-ROSENBROCK_HS1 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-0.5, None)))
-ROSENBROCK_HS2 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-1.5, None)))
-ROSENBROCK_HS3 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-2.5, None)))
+ROSENBROCK_HS1 = InputConstrained(Rosenbrock(), BoxConstraint(None, (1., None)))
+ROSENBROCK_HS2 = InputConstrained(Rosenbrock(), BoxConstraint(None, (0., None)))
+ROSENBROCK_HS3 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-1., None)))
+ROSENBROCK_HS4 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-2., None)))
 
 @constraint(name="oc1")
 def oc1(log_p: float) -> float:
@@ -49,4 +50,4 @@ def oc1(log_p: float) -> float:
 
 ROSENBROCK_OC1 = OutputConstrained(Rosenbrock(), oc1)
 
-__all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3", "ROSENBROCK_OC1"]
+__all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3", "ROSENBROCK_HS4", "ROSENBROCK_OC1"]

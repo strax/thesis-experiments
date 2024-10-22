@@ -41,7 +41,7 @@ from harness.utils import maybe
 from harness.vbmc.posterior_adjustment import feasibility_adjusted_sample
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
 from harness.vbmc.tasks import VBMCInferenceProblem, Constrained, InputConstrained, OutputConstrained, is_constrained, get_constraint, without_constraints
-from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3, ROSENBROCK_OC1
+from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3, ROSENBROCK_HS4, ROSENBROCK_OC1
 from harness.vbmc.tasks.time_perception import TimePerception
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
@@ -463,6 +463,10 @@ def main():
         VBMCExperiment(
             name="rosenbrock+hs3",
             model=ROSENBROCK_HS3,
+        ),
+        VBMCExperiment(
+            name="rosenbrock+hs4",
+            model=ROSENBROCK_HS4,
         ),
         VBMCExperiment(
             name="rosenbrock+oc1",
