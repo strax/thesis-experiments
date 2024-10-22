@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Sequence
 from pathlib import Path
 
 import chex
@@ -81,6 +81,10 @@ class TimePerception:
     @property
     def ndim(self) -> int:
         return 5
+
+    @property
+    def variable_names(self) -> Sequence[str]:
+        return ["w_s", "w_m", "mu_p", "sigma_p", "lambda"]
 
     @property
     def prior(self) -> tfd.Distribution:
