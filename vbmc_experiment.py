@@ -273,14 +273,41 @@ def run_trial(
     feasibility_estimator = make_feasibility_estimator(
         feasibility_estimator_kind, model
     )
-    inference_result = run_vbmc(
-        model,
-        key=key,
-        vbmc_options=dict(
-            feasibility_estimator=feasibility_estimator
-        ),
-        logger=logger
-    )
+    try:
+        inference_result = run_vbmc(
+            model,
+            key=key,
+            vbmc_options=dict(
+                feasibility_estimator=feasibility_estimator
+            ),
+            logger=logger
+        )
+    except Exception as err:
+        logger.exception(f"Caught exception while running VBMC:")
+        return VBMCTrialResult(
+            experiment=name,
+            feasibility_estimator=feasibility_estimator_kind,
+            vp_sample_checksum=0,
+            vp_sample_count=options.vp_sample_count,
+            reference_sample_checksum=crc32(reference_sample),
+            reference_sample_count=np.size(reference_sample, 0),
+            gskl=np.nan,
+            mmtv=np.nan,
+            c2st=np.nan,
+            seed=seed,
+            success=False,
+            convergence_status="",
+            iterations=-1,
+            target_evaluations=-1,
+            failed_evaluations=-1,
+            reliability_index=np.nan,
+            elbo=np.nan,
+            elbo_sd=np.nan,
+            inference_runtime=np.nan,
+            fe_update_runtime=np.nan,
+            fe_predict_runtime=np.nan,
+            fe_optimize_runtime=np.nan
+        )
 
     logger.debug(inference_result.message)
     if not inference_result.success:
