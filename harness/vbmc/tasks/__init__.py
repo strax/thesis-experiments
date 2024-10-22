@@ -83,6 +83,39 @@ class InputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
         p = self.inner.log_likelihood(x)
         return jnp.where(self.constraint(x) >= 0.5, p, jnp.nan)
 
+@dataclass
+class OutputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
+    inner: T
+    constraint: Constraint
+
+    def __init__(self, inner: T, constraint: Constraint):
+        self.inner = inner
+        self.constraint = constraint
+
+    @property
+    def prior(self) -> tfd.Distribution:
+        return self.inner.prior
+
+    @property
+    def name(self) -> str:
+        return self.inner.name
+
+    @property
+    def bounds(self) -> Array:
+        return self.inner.bounds
+
+    @property
+    def plausible_bounds(self) -> Array:
+        return self.inner.plausible_bounds
+
+    @override
+    def without_constraints(self) -> T:
+        return self.inner
+
+    def log_likelihood(self, x: ArrayLike) -> float:
+        p = self.inner.log_likelihood(x)
+        return jnp.where(self.constraint(p) >= 0.5, p, jnp.nan)
+
 def is_constrained(inference_problem: VBMCInferenceProblem) -> TypeGuard[Constrained]:
     return isinstance(inference_problem, Constrained)
 

@@ -40,8 +40,8 @@ from harness.timer import Timer
 from harness.utils import maybe
 from harness.vbmc.posterior_adjustment import feasibility_adjusted_sample
 from harness.vbmc.helpers import count_failed_evaluations, get_timings_pytree
-from harness.vbmc.tasks import VBMCInferenceProblem, Constrained, is_constrained, get_constraint, without_constraints
-from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3
+from harness.vbmc.tasks import VBMCInferenceProblem, Constrained, InputConstrained, OutputConstrained, is_constrained, get_constraint, without_constraints
+from harness.vbmc.tasks.rosenbrock import Rosenbrock, ROSENBROCK_HS1, ROSENBROCK_HS2, ROSENBROCK_HS3, ROSENBROCK_OC1
 from harness.vbmc.tasks.time_perception import TimePerception
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
@@ -49,15 +49,22 @@ POSTERIORS_PATH = Path.cwd() / "posteriors"
 DEFAULT_TRIALS = 20
 DEFAULT_VP_SAMPLE_COUNT = 400000
 
-def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
+def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInferenceProblem):
     match kind:
         case FeasibilityEstimatorKind.NONE:
             return None
         case FeasibilityEstimatorKind.ORACLE:
-            assert constraint is not None, ValueError(
-                "constraint cannot be None when using oracle feasibility estimation"
-            )
-            return OracleFeasibilityEstimator(constraint)
+            if isinstance(model, InputConstrained):
+                return OracleFeasibilityEstimator(model.constraint)
+            elif isinstance(model, OutputConstrained):
+                # Output constraint: run full model through constraint
+                @jax.jit
+                def output_constraint_oracle(x):
+                    p = model.unnormalized_log_prob(x)
+                    return jnp.float_(jnp.isfinite(p))
+                return OracleFeasibilityEstimator(output_constraint_oracle)
+            else:
+                raise ValueError("model needs to be either input or output constrained")
         case FeasibilityEstimatorKind.GPC_MATERN52:
             return GPCFeasibilityEstimator()
 
@@ -456,6 +463,10 @@ def main():
         VBMCExperiment(
             name="rosenbrock+hs3",
             model=ROSENBROCK_HS3,
+        ),
+        VBMCExperiment(
+            name="rosenbrock+oc1",
+            model=ROSENBROCK_OC1
         )
     ]
 

@@ -8,9 +8,9 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 
 from harness.test_functions import rosen
-from harness.constraints import BoxConstraint
+from harness.constraints import BoxConstraint, constraint
 
-from . import VBMCInferenceProblem, InputConstrained
+from . import VBMCInferenceProblem, InputConstrained, OutputConstrained
 
 tfd = tfp.distributions
 
@@ -43,4 +43,10 @@ ROSENBROCK_HS1 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-0.5, None)
 ROSENBROCK_HS2 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-1.5, None)))
 ROSENBROCK_HS3 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-2.5, None)))
 
-__all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3"]
+@constraint(name="oc1")
+def oc1(log_p: float) -> float:
+    return log_p > -100
+
+ROSENBROCK_OC1 = OutputConstrained(Rosenbrock(), oc1)
+
+__all__ = ["Rosenbrock", "ROSENBROCK_HS1", "ROSENBROCK_HS2", "ROSENBROCK_HS3", "ROSENBROCK_OC1"]
