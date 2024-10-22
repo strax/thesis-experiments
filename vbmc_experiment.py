@@ -266,7 +266,7 @@ def run_trial(
     logger.info("Executing task")
 
     feasibility_estimator = make_feasibility_estimator(
-        feasibility_estimator_kind, get_constraint(model)
+        feasibility_estimator_kind, model
     )
     inference_result = run_vbmc(
         model,
