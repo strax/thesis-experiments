@@ -167,6 +167,8 @@ class VBMCTrialResult:
     experiment: str
     seed: int
     feasibility_estimator: str
+    reference_posterior_name: str
+    posterior_feasibility_adjustment: bool
     # endregion
 
     # region Configuration
@@ -258,7 +260,7 @@ def run_trial(
     seed: int,
     *,
     feasibility_estimator_kind: FeasibilityEstimatorKind,
-    feasibility_adjustment: bool,
+    posterior_feasibility_adjustment: bool,
     reference_posterior_name: str,
     options: Options,
     logger: Logger
@@ -289,6 +291,8 @@ def run_trial(
             feasibility_estimator=feasibility_estimator_kind,
             vp_sample_checksum=0,
             vp_sample_count=options.vp_sample_count,
+            reference_posterior_name=reference_posterior_name,
+            posterior_feasibility_adjustment=posterior_feasibility_adjustment,
             reference_sample_checksum=crc32(reference_sample),
             reference_sample_count=np.size(reference_sample, 0),
             gskl=np.nan,
@@ -315,7 +319,7 @@ def run_trial(
     else:
         logger.debug(f"Inference completed in {timedelta(seconds=inference_result.runtime)}", elbo=inference_result.elbo, elbo_sd=inference_result.elbo_sd)
 
-    if feasibility_adjustment and feasibility_estimator is not None:
+    if posterior_feasibility_adjustment and feasibility_estimator is not None:
         logger.debug("Sampling with feasibility adjustment")
         vp_samples = feasibility_adjusted_sample(
             inference_result.vp,
@@ -342,6 +346,8 @@ def run_trial(
         feasibility_estimator=feasibility_estimator_kind,
         vp_sample_checksum=crc32(vp_samples),
         vp_sample_count=options.vp_sample_count,
+        reference_posterior_name=reference_posterior_name,
+        posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         reference_sample_checksum=crc32(reference_sample),
         reference_sample_count=np.size(reference_sample, 0),
         gskl=gskl,
@@ -379,7 +385,7 @@ class VBMCTrial:
     index: int
     seed: SeedSequence
     feasibility_estimator: FeasibilityEstimatorKind
-    feasibility_adjustment: bool
+    posterior_feasibility_adjustment: bool
 
     @property
     def model(self):
@@ -391,7 +397,7 @@ class VBMCTrial:
 
     @property
     def reference_posterior_name(self):
-        if self.feasibility_adjustment:
+        if self.posterior_feasibility_adjustment:
             return self.experiment.name
         else:
             return without_constraints(self.experiment.model).name
@@ -402,7 +408,7 @@ class VBMCTrial:
             self.experiment.model,
             seed2int(self.seed),
             feasibility_estimator_kind=self.feasibility_estimator,
-            feasibility_adjustment=self.feasibility_adjustment,
+            posterior_feasibility_adjustment=self.posterior_feasibility_adjustment,
             reference_posterior_name=self.reference_posterior_name,
             options=options,
             logger=logger
@@ -422,7 +428,7 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                 index=i,
                 seed=deepcopy(subseed),
                 feasibility_estimator=feasibility_estimator,
-                feasibility_adjustment=False
+                posterior_feasibility_adjustment=False
             )
             if is_constrained(experiment.model):
                 yield VBMCTrial(
@@ -430,7 +436,7 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                     index=i,
                     seed=deepcopy(subseed),
                     feasibility_estimator=feasibility_estimator,
-                    feasibility_adjustment=True
+                    posterior_feasibility_adjustment=True
                 )
 
 def print_task_plan(tasks: Iterable[VBMCTrial]):
@@ -442,7 +448,7 @@ def print_task_plan(tasks: Iterable[VBMCTrial]):
             maybe(str, get_constraint(trial.experiment.model), ""),
             trial.feasibility_estimator.replace("none", ""),
             trial.reference_posterior_name,
-            trial.feasibility_adjustment,
+            trial.posterior_feasibility_adjustment,
             seed2int(trial.seed)
         ])
     print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Reference posterior", "Posterior adjustment", "Seed")))
