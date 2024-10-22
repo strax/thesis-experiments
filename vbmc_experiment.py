@@ -418,7 +418,7 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                 feasibility_estimator=feasibility_estimator,
                 feasibility_adjustment=False
             )
-            if is_constrained:
+            if is_constrained(experiment.model):
                 yield VBMCTrial(
                     experiment=experiment,
                     index=i,
