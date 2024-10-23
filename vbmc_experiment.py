@@ -226,12 +226,17 @@ def run_vbmc(
 
     logger.debug(f"Begin VBMC inference", seed=seed)
 
+    try:
+        initial_condition = model.prior.mode()
+    except NotImplementedError:
+        initial_condition = None
+
     # Seed numpy random state from JAX PRNG
     np.random.seed(seed)
 
     vbmc = VBMC(
         jax.jit(model.unnormalized_log_prob),
-        model.prior.mode(),
+        initial_condition,
         *model.bounds,
         *model.plausible_bounds,
         options=vbmc_options
