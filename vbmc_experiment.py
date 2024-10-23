@@ -50,6 +50,7 @@ from harness.vbmc.tasks.rosenbrock import (
     ROSENBROCK_HS5,
     ROSENBROCK_OC1
 )
+from harness.vbmc.tasks.btp import BTP
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -279,7 +280,14 @@ def run_trial(
     logger: Logger
 ):
     reference_sample = get_reference_posterior(reference_posterior_name)
-    logger.debug(f"Loaded reference posterior", name=reference_posterior_name, checksum=crc32(reference_sample))
+    reference_sample_count = np.size(reference_sample, 0)
+    logger.debug(f"Loaded reference posterior", name=reference_posterior_name, checksum=crc32(reference_sample), shape=np.shape(reference_sample))
+
+    vp_sample_count = options.vp_sample_count
+    if vp_sample_count > reference_sample_count:
+        logger.debug(f"Truncating VP sample size to match sample size of reference posterior ({reference_sample_count})")
+        vp_sample_count = reference_sample_count
+
 
     key = jax.random.key(seed)
 
@@ -303,11 +311,11 @@ def run_trial(
             experiment=name,
             feasibility_estimator=feasibility_estimator_kind,
             vp_sample_checksum=0,
-            vp_sample_count=options.vp_sample_count,
+            vp_sample_count=vp_sample_count,
             reference_posterior_name=reference_posterior_name,
             posterior_feasibility_adjustment=posterior_feasibility_adjustment,
             reference_sample_checksum=crc32(reference_sample),
-            reference_sample_count=np.size(reference_sample, 0),
+            reference_sample_count=reference_sample_count,
             gskl=np.nan,
             mmtv=np.nan,
             c2st=np.nan,
@@ -337,12 +345,12 @@ def run_trial(
         vp_samples = feasibility_adjusted_sample(
             inference_result.vp,
             feasibility_estimator,
-            options.vp_sample_count,
+            vp_sample_count,
             rng=np.random.default_rng(jax.random.bits(key, dtype=jnp.uint32).item())
         )
     else:
-        vp_samples, _ = inference_result.vp.sample(options.vp_sample_count)
-    logger.debug(f"Generated {options.vp_sample_count} samples from variational posterior", checksum=crc32(vp_samples))
+        vp_samples, _ = inference_result.vp.sample(vp_sample_count)
+    logger.debug(f"Generated {vp_sample_count} samples from variational posterior", checksum=crc32(vp_samples))
 
     logger.debug("Computing metrics")
     gskl = metrics.gauss_symm_kl_divergence(reference_sample, vp_samples)
@@ -358,11 +366,11 @@ def run_trial(
         experiment=name,
         feasibility_estimator=feasibility_estimator_kind,
         vp_sample_checksum=crc32(vp_samples),
-        vp_sample_count=options.vp_sample_count,
+        vp_sample_count=vp_sample_count,
         reference_posterior_name=reference_posterior_name,
         posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         reference_sample_checksum=crc32(reference_sample),
-        reference_sample_count=np.size(reference_sample, 0),
+        reference_sample_count=reference_sample_count,
         gskl=gskl,
         mmtv=mmtv,
         c2st=c2st,
@@ -473,6 +481,7 @@ def main():
     configure_logging(options.verbose)
     logger = get_logger()
 
+    btp = BTP
     experiments = [
         VBMCExperiment(
             model=Rosenbrock()
@@ -500,6 +509,10 @@ def main():
         VBMCExperiment(
             name="rosenbrock+oc1",
             model=ROSENBROCK_OC1
+        ),
+        VBMCExperiment(
+            name="btp",
+            model=BTP.from_mat("./btp-data.mat")
         )
     ]
 

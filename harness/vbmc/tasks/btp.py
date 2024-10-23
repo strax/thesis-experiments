@@ -32,8 +32,8 @@ _FLOAT64_EPS = np.finfo(float).eps
 
 @dataclass(kw_only=True)
 class BTP:
-    bounds: Tuple[NDArray, NDArray]
-    plausible_bounds: Tuple[NDArray, NDArray]
+    bounds: NDArray
+    plausible_bounds: NDArray
     data: BTPData
     likelihood_mode: NDArray
     likelihood_mode_fval: float
@@ -57,8 +57,8 @@ class BTP:
         plb = np.copy(data["PLB"])
         plb[1] = 0.02
         return BTP(
-            bounds=(data["LB"], data["UB"]),
-            plausible_bounds=(plb, data["PUB"]),
+            bounds=np.stack((data["LB"], data["UB"])),
+            plausible_bounds=np.stack((plb, data["PUB"])),
             data=BTPData(
                 X=data["Data"]["X"],
                 S=data["Data"]["S"],
@@ -79,6 +79,10 @@ class BTP:
         )
 
     @property
+    def name(self) -> str:
+        return "btp"
+
+    @property
     def ndim(self) -> int:
         return 5
 
@@ -92,7 +96,7 @@ class BTP:
 
     @property
     def constraining_bijector(self) -> tfb.Bijector:
-        return tfb.Blockwise([tfb.Sigmoid(a, b) for a, b in zip(*self.bounds)])
+        return tfb.Blockwise([tfb.Sigmoid(a, b) for a, b in zip(*jnp.unstack(self.bounds))])
 
     def log_likelihood(self, theta):
         chex.assert_size(theta, self.ndim)

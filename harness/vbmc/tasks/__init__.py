@@ -13,7 +13,7 @@ from harness.constraints import Constraint
 
 tfd = tfp.distributions
 
-class VBMCInferenceProblem(ABC):
+class VBMCInferenceProblem(Protocol):
     @property
     @abstractmethod
     def name(self) -> str:
