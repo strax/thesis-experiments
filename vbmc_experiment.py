@@ -57,10 +57,11 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInfere
             if isinstance(model, InputConstrained):
                 return OracleFeasibilityEstimator(model.constraint)
             elif isinstance(model, OutputConstrained):
-                # Output constraint: run full model through constraint
+                # For output constraints, the joint density needs to be evaluated to be able to apply
+                # the outcome constraint
                 @jax.jit
                 def output_constraint_oracle(x):
-                    p = model.unnormalized_log_prob(x)
+                    p = jax.vmap(model.unnormalized_log_prob)(x)
                     return jnp.float_(jnp.isfinite(p))
                 return OracleFeasibilityEstimator(output_constraint_oracle)
             else:
