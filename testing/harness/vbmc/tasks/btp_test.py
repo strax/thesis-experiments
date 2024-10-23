@@ -5,7 +5,7 @@ import scipy.stats as sps
 import pytest
 from pytest import FixtureRequest, approx
 
-from harness.vbmc.tasks.time_perception import TimePerception
+from harness.vbmc.tasks.btp import BTP
 
 def reference_log_likelihood(model, theta):
     """Compute the log density of the likelihood.
@@ -95,10 +95,10 @@ def reference_log_likelihood(model, theta):
 
 
 @pytest.fixture(scope="module")
-def model(request: FixtureRequest) -> TimePerception:
-    return TimePerception.from_mat(request.config.rootpath / "timing.mat")
+def model(request: FixtureRequest) -> BTP:
+    return BTP.from_mat(request.config.rootpath / "btp-data.mat")
 
-def test_log_likelihood_vs_test_vectors(model: TimePerception):
+def test_log_likelihood_vs_test_vectors(model: BTP):
     assert model.log_likelihood(np.array(model.prior_mean)) == approx(-4586.122592352263)
     assert model.log_likelihood(np.array(model.posterior_mean)) == approx(-3840.305410361053)
     assert model.log_likelihood(np.array(model.posterior_mode)) == approx(-3839.1732707896977)
@@ -115,7 +115,7 @@ def test_log_likelihood_vs_test_vectors(model: TimePerception):
     x0 = np.array([0.49456502, 0.19717807, 0.64826605, 0.19650659, 0.11716733])
     assert model.log_likelihood(x0) == approx(-5294.073297104582)
 
-def test_jitted_log_likelihood_vs_reference(model: TimePerception):
+def test_jitted_log_likelihood_vs_reference(model: BTP):
     log_likelihood = jax.jit(model.log_likelihood)
     keys = jax.random.split(jax.random.key(0), 100)
     for key in keys:

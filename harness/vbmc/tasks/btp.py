@@ -20,7 +20,7 @@ tfd = tfp.distributions
 
 
 @dataclass(kw_only=True)
-class TimePerceptionData:
+class BTPData:
     X: NDArray
     S: NDArray
     R: NDArray
@@ -31,10 +31,10 @@ _FLOAT64_EPS = np.finfo(float).eps
 
 
 @dataclass(kw_only=True)
-class TimePerception:
+class BTP:
     bounds: Tuple[NDArray, NDArray]
     plausible_bounds: Tuple[NDArray, NDArray]
-    data: TimePerceptionData
+    data: BTPData
     likelihood_mode: NDArray
     likelihood_mode_fval: float
     prior_mean: NDArray
@@ -48,18 +48,18 @@ class TimePerception:
     posterior_marginal_pdf: NDArray
 
     @staticmethod
-    def from_mat(path: StrPath) -> TimePerception:
-        return TimePerception.from_dict(loadmat(str(path), simplify_cells=True)["y"])
+    def from_mat(path: StrPath) -> BTP:
+        return BTP.from_dict(loadmat(str(path), simplify_cells=True)["y"])
 
     @staticmethod
-    def from_dict(data: dict) -> TimePerception:
+    def from_dict(data: dict) -> BTP:
         assert data["D"] == 5
         plb = np.copy(data["PLB"])
         plb[1] = 0.02
-        return TimePerception(
+        return BTP(
             bounds=(data["LB"], data["UB"]),
             plausible_bounds=(plb, data["PUB"]),
-            data=TimePerceptionData(
+            data=BTPData(
                 X=data["Data"]["X"],
                 S=data["Data"]["S"],
                 R=data["Data"]["R"].reshape(-1, 1),

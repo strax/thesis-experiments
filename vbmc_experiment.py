@@ -50,7 +50,6 @@ from harness.vbmc.tasks.rosenbrock import (
     ROSENBROCK_HS5,
     ROSENBROCK_OC1
 )
-from harness.vbmc.tasks.time_perception import TimePerception
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
