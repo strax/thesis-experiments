@@ -499,14 +499,14 @@ def main():
         )
     ]
 
-    tasks = list(generate_trials(experiments, seed, options.trials))
-
     if options.filter:
         experiments = [
             experiment
             for experiment in experiments
             if fnmatch(experiment.name, options.filter)
         ]
+
+    tasks = list(generate_trials(experiments, seed, options.trials))
 
     if options.show_plan:
         print_task_plan(tasks)
