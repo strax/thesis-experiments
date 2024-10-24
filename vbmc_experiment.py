@@ -50,7 +50,7 @@ from harness.vbmc.tasks.rosenbrock import (
     ROSENBROCK_HS5,
     ROSENBROCK_OC1
 )
-from harness.vbmc.tasks.btp import BTP
+from harness.vbmc.tasks.btp import BTP, ac1
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -63,7 +63,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInfere
             return None
         case FeasibilityEstimatorKind.ORACLE:
             if isinstance(model, InputConstrained):
-                return OracleFeasibilityEstimator(model.constraint)
+                return OracleFeasibilityEstimator(jax.vmap(model.constraint))
             elif isinstance(model, OutputConstrained):
                 # For output constraints, the joint density needs to be evaluated to be able to apply
                 # the outcome constraint
@@ -494,7 +494,7 @@ def main():
     configure_logging(options.verbose)
     logger = get_logger()
 
-    btp = BTP
+    btp = BTP.from_mat("./btp-data.mat")
     experiments = [
         VBMCExperiment(
             model=Rosenbrock()
@@ -525,7 +525,11 @@ def main():
         ),
         VBMCExperiment(
             name="btp",
-            model=BTP.from_mat("./btp-data.mat")
+            model=btp
+        ),
+        VBMCExperiment(
+            name="btp+ac1",
+            model=InputConstrained(btp, ac1)
         )
     ]
 

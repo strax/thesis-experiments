@@ -13,6 +13,7 @@ import tensorflow_probability.substrates.jax as tfp
 from numpy.typing import NDArray
 from scipy.io import loadmat
 
+from harness.constraints import constraint
 from harness.typing import StrPath
 
 tfb = tfp.bijectors
@@ -158,5 +159,9 @@ class BTP:
     def unnormalized_log_prob(self, theta):
         return self.log_likelihood(theta) + self.prior.log_prob(theta)
 
+@constraint()
+def ac1(theta):
+    chex.assert_rank(theta, 1)
+    return jnp.atan2((theta[2] - 0.6) / 0.375, (theta[3] - 0.075) / 0.3) < jnp.deg2rad(53)
 
 # from numpy.testing import assert_array_almost_equal_nulp
