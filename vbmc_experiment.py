@@ -178,6 +178,7 @@ class VBMCTrialResult:
     feasibility_estimator: str
     reference_posterior_name: str
     posterior_feasibility_adjustment: bool
+    rotoscale: bool
     # endregion
 
     # region Configuration
@@ -276,6 +277,7 @@ def run_trial(
     feasibility_estimator_kind: FeasibilityEstimatorKind,
     posterior_feasibility_adjustment: bool,
     reference_posterior_name: str,
+    rotoscale: bool,
     options: Options,
     logger: Logger
 ):
@@ -292,6 +294,8 @@ def run_trial(
     key = jax.random.key(seed)
 
     logger.info("Executing task")
+    if not rotoscale:
+        logger.debug("Rotoscaling disabled")
 
     feasibility_estimator = make_feasibility_estimator(
         feasibility_estimator_kind, model
@@ -302,7 +306,7 @@ def run_trial(
             key=key,
             vbmc_options=dict(
                 feasibility_estimator=feasibility_estimator,
-                warp_rotoscaling=False
+                warp_rotoscaling=rotoscale
             ),
             logger=logger
         )
@@ -311,6 +315,7 @@ def run_trial(
         return VBMCTrialResult(
             experiment=name,
             feasibility_estimator=feasibility_estimator_kind,
+            rotoscale=rotoscale,
             vp_sample_checksum=0,
             vp_sample_count=vp_sample_count,
             reference_posterior_name=reference_posterior_name,
@@ -366,6 +371,7 @@ def run_trial(
     return VBMCTrialResult(
         experiment=name,
         feasibility_estimator=feasibility_estimator_kind,
+        rotoscale=rotoscale,
         vp_sample_checksum=crc32(vp_samples),
         vp_sample_count=vp_sample_count,
         reference_posterior_name=reference_posterior_name,
@@ -408,6 +414,7 @@ class VBMCTrial:
     seed: SeedSequence
     feasibility_estimator: FeasibilityEstimatorKind
     posterior_feasibility_adjustment: bool
+    rotoscale: bool
 
     @property
     def model(self):
@@ -432,6 +439,7 @@ class VBMCTrial:
             feasibility_estimator_kind=self.feasibility_estimator,
             posterior_feasibility_adjustment=self.posterior_feasibility_adjustment,
             reference_posterior_name=self.reference_posterior_name,
+            rotoscale=self.rotoscale,
             options=options,
             logger=logger
         )
@@ -439,27 +447,30 @@ class VBMCTrial:
 def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n_trials: int):
     # Trials
     for (experiment, (i, subseed)) in product(experiments, enumerate(seed.spawn(n_trials))):
-        if is_constrained(experiment.model):
-            feasibility_estimators = list(FeasibilityEstimatorKind)
-        else:
-            feasibility_estimators = [FeasibilityEstimatorKind.NONE]
-
-        for feasibility_estimator in feasibility_estimators:
-            yield VBMCTrial(
-                experiment=experiment,
-                index=i,
-                seed=deepcopy(subseed),
-                feasibility_estimator=feasibility_estimator,
-                posterior_feasibility_adjustment=False
-            )
+        for rotoscale in (False, True):
             if is_constrained(experiment.model):
+                feasibility_estimators = list(FeasibilityEstimatorKind)
+            else:
+                feasibility_estimators = [FeasibilityEstimatorKind.NONE]
+
+            for feasibility_estimator in feasibility_estimators:
                 yield VBMCTrial(
                     experiment=experiment,
                     index=i,
                     seed=deepcopy(subseed),
                     feasibility_estimator=feasibility_estimator,
-                    posterior_feasibility_adjustment=True
+                    posterior_feasibility_adjustment=False,
+                    rotoscale=rotoscale
                 )
+                if is_constrained(experiment.model):
+                    yield VBMCTrial(
+                        experiment=experiment,
+                        index=i,
+                        seed=deepcopy(subseed),
+                        feasibility_estimator=feasibility_estimator,
+                        posterior_feasibility_adjustment=True,
+                        rotoscale=rotoscale
+                    )
 
 def print_task_plan(tasks: Iterable[VBMCTrial]):
     rows = []
@@ -470,10 +481,11 @@ def print_task_plan(tasks: Iterable[VBMCTrial]):
             maybe(str, get_constraint(trial.experiment.model), ""),
             trial.feasibility_estimator.replace("none", ""),
             trial.reference_posterior_name,
+            trial.rotoscale,
             trial.posterior_feasibility_adjustment,
             seed2int(trial.seed)
         ])
-    print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Reference posterior", "Posterior adjustment", "Seed")))
+    print(tabulate(rows, headers=("ID", "Problem", "Constraint", "Feasibility estimator", "Reference posterior", "Rotoscale", "Posterior adjustment", "Seed")))
 
 def main():
     options = Options.from_args()
