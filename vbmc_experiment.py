@@ -361,9 +361,10 @@ def run_trial(
     logger.debug("Computing metrics")
     gskl = metrics.gauss_symm_kl_divergence(reference_sample, vp_samples)
     mmtv = metrics.marginal_total_variation(reference_sample, vp_samples).mean()
+    c2st_sample_count = min(options.vp_sample_count, 10000)
     c2st = metrics.c2st(
-        reference_sample[:options.vp_sample_count],
-        vp_samples,
+        reference_sample[:c2st_sample_count],
+        vp_samples[:c2st_sample_count],
         random_state=np.random.RandomState(jax.random.bits(key, dtype=jnp.uint32).item())
     )
     logger.info("Task completed")
