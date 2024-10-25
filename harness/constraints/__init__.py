@@ -9,7 +9,8 @@ from .box import BoxConstraint
 
 @constraint()
 def sigmoid_sinusoid_th(theta, *, threshold=0.55):
-    return sigmoid(sinusoid(theta)) <= threshold
+    batched_sinusoid = jnp.vectorize(sinusoid, signature="(2)->()")
+    return sigmoid(batched_sinusoid(theta)) <= threshold
 
 
 @constraint()

@@ -8,11 +8,12 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 
 from harness.test_functions import rosen
-from harness.constraints import BoxConstraint, constraint
+from harness.constraints import BoxConstraint, constraint, sigmoid_sinusoid_th
 
-from . import VBMCInferenceProblem, InputConstrained, OutputConstrained
+from . import VBMCInferenceProblem, InputConstrained, OutputConstrained, plausible_bounds_to_unit_interval
 
 tfd = tfp.distributions
+tfb = tfp.bijectors
 
 @dataclass(frozen=True)
 class Rosenbrock(VBMCInferenceProblem):
@@ -39,17 +40,25 @@ class Rosenbrock(VBMCInferenceProblem):
     def log_likelihood(self, x):
         return -1e-2 * rosen(x)
 
-ROSENBROCK_HS1 = InputConstrained(Rosenbrock(), BoxConstraint(None, (1., None)))
-ROSENBROCK_HS2 = InputConstrained(Rosenbrock(), BoxConstraint(None, (0., None)))
-ROSENBROCK_HS3 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-1., None)))
-ROSENBROCK_HS4 = InputConstrained(Rosenbrock(), BoxConstraint(None, (-2., None)))
-ROSENBROCK_HS5 = InputConstrained(Rosenbrock(), BoxConstraint((0., None), None))
+_rosenbrock = Rosenbrock()
+
+ROSENBROCK_HS1 = InputConstrained(_rosenbrock, BoxConstraint(None, (1., None)))
+ROSENBROCK_HS2 = InputConstrained(_rosenbrock, BoxConstraint(None, (0., None)))
+ROSENBROCK_HS3 = InputConstrained(_rosenbrock, BoxConstraint(None, (-1., None)))
+ROSENBROCK_HS4 = InputConstrained(_rosenbrock, BoxConstraint(None, (-2., None)))
+ROSENBROCK_HS5 = InputConstrained(_rosenbrock, BoxConstraint((0., None), None))
+
+ROSENBROCK_SST = InputConstrained(
+    _rosenbrock,
+    sigmoid_sinusoid_th,
+    bijector=plausible_bounds_to_unit_interval(_rosenbrock)
+)
 
 @constraint(name="oc1")
 def oc1(log_p: float) -> float:
     return log_p > -100
 
-ROSENBROCK_OC1 = OutputConstrained(Rosenbrock(), oc1)
+ROSENBROCK_OC1 = OutputConstrained(_rosenbrock, oc1)
 
 __all__ = [
     "Rosenbrock",
@@ -58,5 +67,6 @@ __all__ = [
     "ROSENBROCK_HS3",
     "ROSENBROCK_HS4",
     "ROSENBROCK_HS5",
-    "ROSENBROCK_OC1"
+    "ROSENBROCK_OC1",
+    "ROSENBROCK_SST"
 ]

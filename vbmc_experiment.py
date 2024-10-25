@@ -48,7 +48,8 @@ from harness.vbmc.tasks.rosenbrock import (
     ROSENBROCK_HS3,
     ROSENBROCK_HS4,
     ROSENBROCK_HS5,
-    ROSENBROCK_OC1
+    ROSENBROCK_OC1,
+    ROSENBROCK_SST
 )
 from harness.vbmc.tasks.btp import BTP, ac1
 
@@ -523,6 +524,10 @@ def main():
         VBMCExperiment(
             name="rosenbrock+oc1",
             model=ROSENBROCK_OC1
+        ),
+        VBMCExperiment(
+            name="rosenbrock+sst",
+            model=ROSENBROCK_SST
         ),
         VBMCExperiment(
             name="btp",

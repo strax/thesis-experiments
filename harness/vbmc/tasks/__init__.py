@@ -12,6 +12,7 @@ from jax.typing import ArrayLike
 from harness.constraints import Constraint
 
 tfd = tfp.distributions
+tfb = tfp.bijectors
 
 class VBMCInferenceProblem(Protocol):
     @property
@@ -54,10 +55,12 @@ class Constrained(Protocol):
 class InputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
     inner: T
     constraint: Constraint
+    bijector: tfb.Bijector
 
-    def __init__(self, inner: T, constraint: Constraint):
+    def __init__(self, inner: T, constraint: Constraint, *, bijector: tfb.Bijector = tfb.Identity()):
         self.inner = inner
         self.constraint = constraint
+        self.bijector = bijector
 
     @property
     def prior(self) -> tfd.Distribution:
@@ -81,7 +84,7 @@ class InputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
 
     def log_likelihood(self, x: ArrayLike) -> float:
         p = self.inner.log_likelihood(x)
-        return jnp.where(self.constraint(x) >= 0.5, p, jnp.nan)
+        return jnp.where(self.constraint(self.bijector.forward(x)) >= 0.5, p, jnp.nan)
 
 @dataclass
 class OutputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
@@ -130,3 +133,13 @@ def without_constraints(inference_problem: VBMCInferenceProblem) -> VBMCInferenc
         return inference_problem.without_constraints()
     else:
         return inference_problem
+
+def plausible_bounds_to_unit_interval(inference_problem: VBMCInferenceProblem) -> tfb.Bijector:
+    """
+    Returns a bijector that maps the plausible bounds of the given problem to the unit inverval [0, 1]^D.
+    """
+    a, b = inference_problem.plausible_bounds
+    return tfb.Chain([
+        tfb.Scale(1 / (b - a)),
+        tfb.Shift(-a)
+    ])
