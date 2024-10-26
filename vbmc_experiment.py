@@ -307,7 +307,8 @@ def run_trial(
             key=key,
             vbmc_options=dict(
                 feasibility_estimator=feasibility_estimator,
-                warp_rotoscaling=rotoscale
+                warp_rotoscaling=rotoscale,
+                fun_eval_start=20
             ),
             logger=logger
         )
