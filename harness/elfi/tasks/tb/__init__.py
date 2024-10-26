@@ -69,7 +69,7 @@ class TB(ELFIInferenceProblem):
     def name(self) -> str:
         return "tb"
 
-    def constraint(theta):
+    def constraint(self, theta):
         R1, R2, burden, t1 = np.split(theta.reshape(-1, 4), 4, axis=1)  # note assumed parameter order
         d2 = 5.95
         a2 = R2 * d2
@@ -115,7 +115,7 @@ class TB(ELFIInferenceProblem):
         log_dist = elfi.Operation(np.log, dist)
         return ModelAndDiscrepancy(m, log_dist)
 
-    def build_target_model(model: elfi.ElfiModel):
+    def build_target_model(self, model: elfi.ElfiModel):
         bounds = {'burden': (125, 275), 'R1': (1 + epsilon, R1_bound), 'R2': (epsilon, R2_bound), 't1': (epsilon, t1_bound)}
         span = [bounds[name][1] - bounds[name][0] for name in model.parameter_names]
         kernel = gpy.kern.RBF(input_dim=len(model.parameter_names), ARD=True)
@@ -127,3 +127,4 @@ class TB(ELFIInferenceProblem):
             mf = gpy.mappings.Constant(len(model.parameter_names), 1)
             mf.C = 5
             mf.C.set_prior(gpy.priors.Gamma(2, 2 / mf.C), warning=False)
+        return elfi.GPyRegression(model.parameter_names, bounds=bounds, kernel=kernel, mean_function=mf)
