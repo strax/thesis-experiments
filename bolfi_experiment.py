@@ -119,6 +119,8 @@ def run_bolfi(
     options: Options,
     feasibility_estimator: FeasibilityEstimatorKind,
     posterior_feasibility_adjustment: bool = False,
+    initial_evidence: int,
+    n_evidence: int,
     bolfi_kwargs = dict()
 ) -> BOLFIResult:
     seed = seed2int(seed)
@@ -134,7 +136,7 @@ def run_bolfi(
     bolfi = elfi.BOLFI(
         discrepancy,
         batch_size=1,
-        initial_evidence=10,
+        initial_evidence=initial_evidence,
         update_interval=10,
         bounds=inference_problem.bounds,
         acq_noise_var=0,
@@ -148,7 +150,7 @@ def run_bolfi(
     )
     logger.debug(f"Running BOLFI inference", seed=seed)
     timer = Timer()
-    bolfi.fit(n_evidence=200, bar=False)
+    bolfi.fit(n_evidence=n_evidence, bar=False)
     inference_runtime = timer.elapsed
     logger.debug(
         f"Inference completed in {inference_runtime}", failures=bolfi.n_failures
@@ -186,6 +188,8 @@ def run_trial(
     feasibility_estimator: FeasibilityEstimatorKind,
     reference_posterior_name: str,
     posterior_feasibility_adjustment: bool,
+    initial_evidence: int,
+    n_evidence: int,
     options: Options,
     logger: Logger
 ):
@@ -200,7 +204,9 @@ def run_trial(
         options=options,
         logger=logger,
         feasibility_estimator=feasibility_estimator,
-        posterior_feasibility_adjustment=posterior_feasibility_adjustment
+        posterior_feasibility_adjustment=posterior_feasibility_adjustment,
+        initial_evidence=initial_evidence,
+        n_evidence=n_evidence
     )
 
     if bolfi_result.sample is not None:
@@ -282,6 +288,8 @@ class BOLFITrial:
             feasibility_estimator=self.feasibility_estimator,
             reference_posterior_name=self.reference_posterior_name,
             posterior_feasibility_adjustment=self.posterior_feasibility_adjustment,
+            initial_evidence=self.experiment.initial_evidence,
+            n_evidence=self.experiment.n_evidence,
             options=options,
             logger=logger
         )
@@ -293,6 +301,8 @@ class BOLFIExperiment:
     name: str
     inference_problem: ELFIInferenceProblem
     bolfi_kwargs: dict[str, Any]
+    initial_evidence: int
+    n_evidence: int
 
     def __init__(
         self,
@@ -300,6 +310,8 @@ class BOLFIExperiment:
         /,
         *,
         name: str | None = None,
+        initial_evidence: int = 10,
+        n_evidence: int = 200,
         **kwargs,
     ):
         if name is None:
@@ -308,6 +320,8 @@ class BOLFIExperiment:
                 name += "+" + str(inference_problem.constraint)
         self.name = name
         self.inference_problem = inference_problem
+        self.initial_evidence = initial_evidence
+        self.n_evidence = n_evidence
         self.bolfi_kwargs = kwargs
 
 @dataclass
