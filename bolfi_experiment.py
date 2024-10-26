@@ -37,6 +37,7 @@ from harness.constraints import corner1, corner1_stoch
 from harness.random import seed2int
 from harness.elfi.tasks import ELFIInferenceProblem, SupportsBuildTargetModel
 from harness.elfi.tasks.gauss2d import Gauss2D
+from harness.elfi.tasks.tb import TB
 from harness.logging import get_logger, configure_logging, Logger
 from harness.timer import Timer
 from harness.utils import maybe
@@ -121,6 +122,7 @@ def run_bolfi(
     posterior_feasibility_adjustment: bool = False,
     initial_evidence: int,
     n_evidence: int,
+    sampling_algorithm,
     bolfi_kwargs = dict()
 ) -> BOLFIResult:
     seed = seed2int(seed)
@@ -161,7 +163,14 @@ def run_bolfi(
     else:
         logger.debug("Sampling from BOLFI posterior")
     try:
-        sample = bolfi.sample(options.bolfi_sample_count, verbose=True, feasibility_adjustment=posterior_feasibility_adjustment)
+        if sampling_algorithm == 'nuts':
+            logger.debug("Sampling algorithm: NUTS")
+            sample = bolfi.sample(options.bolfi_sample_count, verbose=True, feasibility_adjustment=posterior_feasibility_adjustment)
+        else:
+            logger.debug("Sampling algorithm: MH")
+            std_estimate = np.array(bolfi.target_model.instance.kern.lengthscale)/5
+            std_dict = {param: estim for param, estim in zip(bolfi.target_model.parameter_names, std_estimate)}
+            sample = bolfi.sample(options.bolfi_sample_count, algorithm='metropolis', sigma_proposals=std_dict)
     except ValueError as err:
         logger.warning(str(err))
         sample = None
@@ -190,6 +199,7 @@ def run_trial(
     posterior_feasibility_adjustment: bool,
     initial_evidence: int,
     n_evidence: int,
+    sampling_algorithm,
     options: Options,
     logger: Logger
 ):
@@ -206,6 +216,7 @@ def run_trial(
         feasibility_estimator=feasibility_estimator,
         posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         initial_evidence=initial_evidence,
+        sampling_algorithm=sampling_algorithm,
         n_evidence=n_evidence
     )
 
@@ -290,6 +301,7 @@ class BOLFITrial:
             posterior_feasibility_adjustment=self.posterior_feasibility_adjustment,
             initial_evidence=self.experiment.initial_evidence,
             n_evidence=self.experiment.n_evidence,
+            sampling_algorithm=self.experiment.sampling_algorithm,
             options=options,
             logger=logger
         )
@@ -303,6 +315,7 @@ class BOLFIExperiment:
     bolfi_kwargs: dict[str, Any]
     initial_evidence: int
     n_evidence: int
+    sampling_algorithm: str
 
     def __init__(
         self,
@@ -312,6 +325,7 @@ class BOLFIExperiment:
         name: str | None = None,
         initial_evidence: int = 10,
         n_evidence: int = 200,
+        sampling_algorithm: str = 'nuts',
         **kwargs,
     ):
         if name is None:
@@ -322,6 +336,7 @@ class BOLFIExperiment:
         self.inference_problem = inference_problem
         self.initial_evidence = initial_evidence
         self.n_evidence = n_evidence
+        self.sampling_algorithm = sampling_algorithm
         self.bolfi_kwargs = kwargs
 
 @dataclass
@@ -446,7 +461,14 @@ def main():
     experiments: List[BOLFIExperiment] = [
         BOLFIExperiment(Gauss2D()),
         BOLFIExperiment(Gauss2D(constraint=corner1)),
-        BOLFIExperiment(Gauss2D(constraint=corner1_stoch))
+        BOLFIExperiment(Gauss2D(constraint=corner1_stoch)),
+        BOLFIExperiment(
+            TB(),
+            name="tb",
+            initial_evidence=100,
+            n_evidence=2000,
+            sampling_algorithm="metropolis"
+        )
     ]
 
     tasks = list(generate_trials(experiments, seed, options.trials))

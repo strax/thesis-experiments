@@ -5,6 +5,7 @@ import elfi
 import GPy as gpy
 import numpy as np
 
+from harness.constraints import FunctionConstraint
 from harness.elfi.tasks import ELFIInferenceProblem, ModelAndDiscrepancy
 
 from . import ops
@@ -69,13 +70,16 @@ class TB(ELFIInferenceProblem):
     def name(self) -> str:
         return "tb"
 
-    def constraint(self, theta):
-        R1, R2, burden, t1 = np.split(theta.reshape(-1, 4), 4, axis=1)  # note assumed parameter order
-        d2 = 5.95
-        a2 = R2 * d2
-        d1 = ops.Rt_to_d(R1, t1)
-        a1 = ops.Rt_to_a(R1, t1)
-        return constraint(burden.squeeze(), a2.squeeze(), d2, a1.squeeze(), d1.squeeze())
+    @property
+    def constraint(self):
+        def tb_constraint(theta):
+            R1, R2, burden, t1 = np.split(theta.reshape(-1, 4), 4, axis=1)  # note assumed parameter order
+            d2 = 5.95
+            a2 = R2 * d2
+            d1 = ops.Rt_to_d(R1, t1)
+            a1 = ops.Rt_to_a(R1, t1)
+            return constraint(burden.squeeze(), a2.squeeze(), d2, a1.squeeze(), d1.squeeze())
+        return FunctionConstraint(tb_constraint)
 
     def build_model(self) -> ModelAndDiscrepancy:
         m = elfi.new_model()

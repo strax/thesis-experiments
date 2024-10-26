@@ -31,8 +31,8 @@ class ELFIInferenceProblem(ELFIModelBuilder):
     def name(self): ...
 
     @property
-    def bounds(self) -> Bounds:
-        raise NotImplementedError
+    def bounds(self) -> Bounds | None:
+        return None
 
     @property
     def constraint(self): ...
