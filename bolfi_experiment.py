@@ -66,7 +66,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint, *, up
             )
             return OracleFeasibilityEstimator(constraint)
         case FeasibilityEstimatorKind.GPC_MATERN52:
-            return GPCFeasibilityEstimator(update_interval=update_interval)
+            return GPCFeasibilityEstimator(reoptimization_interval=update_interval)
 
 
 @dataclass(kw_only=True)
