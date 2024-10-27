@@ -56,7 +56,7 @@ def compute_sample_checksum(sample: Sample | NDArray) -> int:
 def get_reference_posterior(name: str, *, options: Options):
     return np.load(POSTERIORS_PATH / Path(name).with_suffix(".npy"))
 
-def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
+def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint, *, update_interval):
     match kind:
         case FeasibilityEstimatorKind.NONE:
             return None
@@ -66,7 +66,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, constraint):
             )
             return OracleFeasibilityEstimator(constraint)
         case FeasibilityEstimatorKind.GPC_MATERN52:
-            return GPCFeasibilityEstimator()
+            return GPCFeasibilityEstimator(update_interval=update_interval)
 
 
 @dataclass(kw_only=True)
@@ -120,6 +120,7 @@ def run_bolfi(
     options: Options,
     feasibility_estimator: FeasibilityEstimatorKind,
     posterior_feasibility_adjustment: bool = False,
+    update_interval: int,
     initial_evidence: int,
     n_evidence: int,
     sampling_algorithm,
@@ -139,13 +140,13 @@ def run_bolfi(
         discrepancy,
         batch_size=1,
         initial_evidence=initial_evidence,
-        update_interval=10,
+        update_interval=update_interval,
         bounds=inference_problem.bounds,
         acq_noise_var=0,
         seed=seed,
         target_model=target_model,
         feasibility_estimator=make_feasibility_estimator(
-            feasibility_estimator, inference_problem.constraint
+            feasibility_estimator, inference_problem.constraint, update_interval=update_interval
         ),
         max_parallel_batches=1,
         **bolfi_kwargs,
@@ -200,6 +201,7 @@ def run_trial(
     initial_evidence: int,
     n_evidence: int,
     sampling_algorithm,
+    update_interval: int,
     options: Options,
     logger: Logger
 ):
@@ -217,6 +219,7 @@ def run_trial(
         posterior_feasibility_adjustment=posterior_feasibility_adjustment,
         initial_evidence=initial_evidence,
         sampling_algorithm=sampling_algorithm,
+        update_interval=update_interval,
         n_evidence=n_evidence
     )
 
@@ -302,6 +305,7 @@ class BOLFITrial:
             initial_evidence=self.experiment.initial_evidence,
             n_evidence=self.experiment.n_evidence,
             sampling_algorithm=self.experiment.sampling_algorithm,
+            update_interval=self.experiment.update_interval,
             options=options,
             logger=logger
         )
@@ -316,6 +320,7 @@ class BOLFIExperiment:
     initial_evidence: int
     n_evidence: int
     sampling_algorithm: str
+    update_interval: int
 
     def __init__(
         self,
@@ -326,6 +331,7 @@ class BOLFIExperiment:
         initial_evidence: int = 10,
         n_evidence: int = 200,
         sampling_algorithm: str = 'nuts',
+        update_interval: int = 10,
         **kwargs,
     ):
         if name is None:
@@ -337,6 +343,7 @@ class BOLFIExperiment:
         self.initial_evidence = initial_evidence
         self.n_evidence = n_evidence
         self.sampling_algorithm = sampling_algorithm
+        self.update_interval = update_interval
         self.bolfi_kwargs = kwargs
 
 @dataclass
@@ -467,7 +474,8 @@ def main():
             name="tb",
             initial_evidence=100,
             n_evidence=2000,
-            sampling_algorithm="metropolis"
+            sampling_algorithm="metropolis",
+            update_interval=100
         )
     ]
 
