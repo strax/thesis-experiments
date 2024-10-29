@@ -55,12 +55,10 @@ class Constrained(Protocol):
 class InputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
     inner: T
     constraint: Constraint
-    bijector: tfb.Bijector
 
-    def __init__(self, inner: T, constraint: Constraint, *, bijector: tfb.Bijector = tfb.Identity()):
+    def __init__(self, inner: T, constraint: Constraint):
         self.inner = inner
         self.constraint = constraint
-        self.bijector = bijector
 
     @property
     def prior(self) -> tfd.Distribution:
@@ -84,7 +82,7 @@ class InputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):
 
     def log_likelihood(self, x: ArrayLike) -> float:
         p = self.inner.log_likelihood(x)
-        return jnp.where(self.constraint(self.bijector.forward(x)) >= 0.5, p, jnp.nan)
+        return jnp.where(self.constraint(x) >= 0.5, p, jnp.nan)
 
 @dataclass
 class OutputConstrained[T: VBMCInferenceProblem](VBMCInferenceProblem):

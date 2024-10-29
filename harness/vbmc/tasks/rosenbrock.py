@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import override
 
 import jax.numpy as jnp
@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow_probability.substrates.jax as tfp
 
 from harness.test_functions import rosen
-from harness.constraints import BoxConstraint, constraint, sigmoid_sinusoid_th
+from harness.constraints import BoxConstraint, TransformedConstraint, constraint, sigmoid_sinusoid_th
 
 from . import VBMCInferenceProblem, InputConstrained, OutputConstrained, plausible_bounds_to_unit_interval
 
@@ -50,8 +50,10 @@ ROSENBROCK_HS5 = InputConstrained(_rosenbrock, BoxConstraint((0., None), None))
 
 ROSENBROCK_SST = InputConstrained(
     _rosenbrock,
-    sigmoid_sinusoid_th,
-    bijector=plausible_bounds_to_unit_interval(_rosenbrock)
+    TransformedConstraint(
+        sigmoid_sinusoid_th,
+        plausible_bounds_to_unit_interval(_rosenbrock)
+    )
 )
 
 @constraint(name="oc1")

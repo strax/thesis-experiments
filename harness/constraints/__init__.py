@@ -3,14 +3,14 @@ from jax.nn import sigmoid
 
 from harness.test_functions import sinusoid
 
-from .constraint import Constraint, FunctionConstraint, constraint
+from .constraint import Constraint, FunctionConstraint, TransformedConstraint, constraint
 from .box import BoxConstraint
 
 
 @constraint()
 def sigmoid_sinusoid_th(theta, *, threshold=0.55):
     batched_sinusoid = jnp.vectorize(sinusoid, signature="(2)->()")
-    return sigmoid(batched_sinusoid(theta)) <= threshold
+    return jnp.where(jnp.all((theta >= 0) & (theta <= 1), axis=-1), sigmoid(batched_sinusoid(theta)) <= threshold, False)
 
 
 @constraint()
@@ -38,5 +38,6 @@ __all__ = [
     "corner1",
     "Constraint",
     "FunctionConstraint",
+    "TransformedConstraint",
     "BoxConstraint",
 ]
