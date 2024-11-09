@@ -51,7 +51,7 @@ from harness.vbmc.tasks.rosenbrock import (
     ROSENBROCK_OC1,
     ROSENBROCK_SST
 )
-from harness.vbmc.tasks.btp import BTP, ac1
+from harness.vbmc.tasks.btp import BTP, ac1, oc2
 
 POSTERIORS_PATH = Path.cwd() / "posteriors"
 
@@ -537,6 +537,10 @@ def main():
         VBMCExperiment(
             name="btp+ac1",
             model=InputConstrained(btp, ac1)
+        ),
+        VBMCExperiment(
+            name="btp+oc2",
+            model=OutputConstrained(btp, oc2)
         )
     ]
 

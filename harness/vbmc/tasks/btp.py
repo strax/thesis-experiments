@@ -164,4 +164,8 @@ def ac1(theta):
     chex.assert_rank(theta, 1)
     return jnp.atan2((theta[2] - 0.6) / 0.375, (theta[3] - 0.075) / 0.3) < jnp.deg2rad(53)
 
+@constraint()
+def oc2(log_p):
+    return log_p > -9594.
+
 # from numpy.testing import assert_array_almost_equal_nulp
