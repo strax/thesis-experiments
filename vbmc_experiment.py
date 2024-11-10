@@ -407,13 +407,15 @@ class VBMCExperiment:
     name: str
     model: VBMCInferenceProblem
     oracle_batch_size: int | None = None
+    disable_oracle: bool = False
 
-    def __init__(self, *, model: VBMCInferenceProblem, name: str | None = None, oracle_batch_size: int | None = None):
+    def __init__(self, *, model: VBMCInferenceProblem, name: str | None = None, oracle_batch_size: int | None = None, disable_oracle: bool = False):
         if name is None:
             name = model.name
         self.name = name
         self.model = model
         self.oracle_batch_size = oracle_batch_size
+        self.disable_oracle = disable_oracle
 
 @dataclass(kw_only=True)
 class VBMCTrial:
@@ -462,6 +464,8 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                 feasibility_estimators = list(FeasibilityEstimatorKind)
             else:
                 feasibility_estimators = [FeasibilityEstimatorKind.NONE]
+            if experiment.disable_oracle and FeasibilityEstimatorKind.ORACLE in feasibility_estimators:
+                feasibility_estimators.remove(FeasibilityEstimatorKind.ORACLE)
 
             for feasibility_estimator in feasibility_estimators:
                 yield VBMCTrial(
@@ -550,7 +554,7 @@ def main():
         VBMCExperiment(
             name="btp+oc2",
             model=OutputConstrained(btp, oc2),
-            oracle_batch_size=1
+            disable_oracle=True
         )
     ]
 
