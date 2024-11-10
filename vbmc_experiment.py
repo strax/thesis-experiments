@@ -58,7 +58,7 @@ POSTERIORS_PATH = Path.cwd() / "posteriors"
 DEFAULT_TRIALS = 20
 DEFAULT_VP_SAMPLE_COUNT = 400000
 
-def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInferenceProblem):
+def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInferenceProblem, *, oracle_batch_size: int | None = None):
     match kind:
         case FeasibilityEstimatorKind.NONE:
             return None
@@ -70,7 +70,7 @@ def make_feasibility_estimator(kind: FeasibilityEstimatorKind, model: VBMCInfere
                 # the outcome constraint
                 @jax.jit
                 def output_constraint_oracle(x):
-                    p = jax.vmap(model.unnormalized_log_prob)(x)
+                    p = jax.lax.map(model.unnormalized_log_prob, x, batch_size=oracle_batch_size)
                     return jnp.float_(jnp.isfinite(p))
                 return OracleFeasibilityEstimator(output_constraint_oracle)
             else:
@@ -280,6 +280,7 @@ def run_trial(
     reference_posterior_name: str,
     rotoscale: bool,
     options: Options,
+    oracle_batch_size: int | None = None,
     logger: Logger
 ):
     reference_sample = get_reference_posterior(reference_posterior_name)
@@ -299,7 +300,9 @@ def run_trial(
         logger.debug("Rotoscaling disabled")
 
     feasibility_estimator = make_feasibility_estimator(
-        feasibility_estimator_kind, model
+        feasibility_estimator_kind,
+        model,
+        oracle_batch_size=oracle_batch_size
     )
     try:
         inference_result = run_vbmc(
@@ -403,12 +406,14 @@ def run_trial(
 class VBMCExperiment:
     name: str
     model: VBMCInferenceProblem
+    oracle_batch_size: int | None = None
 
-    def __init__(self, *, model: VBMCInferenceProblem, name: str | None = None):
+    def __init__(self, *, model: VBMCInferenceProblem, name: str | None = None, oracle_batch_size: int | None = None):
         if name is None:
             name = model.name
         self.name = name
         self.model = model
+        self.oracle_batch_size = oracle_batch_size
 
 @dataclass(kw_only=True)
 class VBMCTrial:
@@ -418,6 +423,7 @@ class VBMCTrial:
     feasibility_estimator: FeasibilityEstimatorKind
     posterior_feasibility_adjustment: bool
     rotoscale: bool
+    oracle_batch_size: int | None = None
 
     @property
     def model(self):
@@ -444,6 +450,7 @@ class VBMCTrial:
             reference_posterior_name=self.reference_posterior_name,
             rotoscale=self.rotoscale,
             options=options,
+            oracle_batch_size=self.oracle_batch_size,
             logger=logger
         )
 
@@ -463,7 +470,8 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                     seed=deepcopy(subseed),
                     feasibility_estimator=feasibility_estimator,
                     posterior_feasibility_adjustment=False,
-                    rotoscale=rotoscale
+                    rotoscale=rotoscale,
+                    oracle_batch_size=experiment.oracle_batch_size
                 )
                 if is_constrained(experiment.model):
                     yield VBMCTrial(
@@ -472,7 +480,8 @@ def generate_trials(experiments: Iterable[VBMCExperiment], seed: SeedSequence, n
                         seed=deepcopy(subseed),
                         feasibility_estimator=feasibility_estimator,
                         posterior_feasibility_adjustment=True,
-                        rotoscale=rotoscale
+                        rotoscale=rotoscale,
+                        oracle_batch_size=experiment.oracle_batch_size
                     )
 
 def print_task_plan(tasks: Iterable[VBMCTrial]):
@@ -540,7 +549,8 @@ def main():
         ),
         VBMCExperiment(
             name="btp+oc2",
-            model=OutputConstrained(btp, oc2)
+            model=OutputConstrained(btp, oc2),
+            oracle_batch_size=1
         )
     ]
 
